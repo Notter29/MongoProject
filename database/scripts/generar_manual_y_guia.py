@@ -463,15 +463,15 @@ Podrá navegar por los 116 millones de documentos, ver los 6 índices y ejecutar
 4.8. PASO 7: CONFIGURACIÓN DE ACCESO REMOTO DESDE UN PORTÁTIL
 Si desea conectar un portátil durante la exposición para interactuar con la base de datos de esta máquina:
   1. Conexión por Red Local (Mismo Wi-Fi):
-     - IP de este equipo: 192.168.1.13
+     - IP de este equipo: <IP_LOCAL_LAN>
      - Cadena de conexión desde el portátil:
-       mongodb://192.168.1.13:27017/ecommerce_analytics?replicaSet=rs0
+       mongodb://<IP_LOCAL_LAN>:27017/ecommerce_analytics?replicaSet=rs0
      - URL del Dashboard en el navegador del portátil:
-       http://192.168.1.13:3000
+       http://<IP_LOCAL_LAN>:3000
   2. Conexión por VPN ZeroTier (Diferentes redes / Datos móviles):
-     - IP ZeroTier de este equipo: 10.130.192.233
+     - IP ZeroTier de este equipo: <IP_ZEROTIER_O_VPN>
      - Cadena de conexión:
-       mongodb://10.130.192.233:27017/ecommerce_analytics?replicaSet=rs0
+       mongodb://<IP_ZEROTIER_O_VPN>:27017/ecommerce_analytics?replicaSet=rs0
 
 4.9. PASO 8: PROCEDIMIENTO DE DETENCIÓN SEGURA Y LIMPIEZA FINAL
 Para detener los servicios ordenadamente sin corrupción de datos:
@@ -942,10 +942,10 @@ def generar_pdf(ruta_pdf):
          "Permite visualizar la colección de 116M registros, los 6 índices y ejecutar agregaciones interactivas."),
 
         ("Paso 7: Conexión Remota desde un Portátil (Misma Red / ZeroTier)",
-         "• <b>Por Red Local (Wi-Fi):</b> IP de la máquina principal: <code>192.168.1.13</code>.<br/>"
-         "  Cadena: <code>mongodb://192.168.1.13:27017/ecommerce_analytics?replicaSet=rs0</code><br/>"
-         "  Dashboard: <code>http://192.168.1.13:3000</code><br/>"
-         "• <b>Por ZeroTier VPN:</b> IP: <code>10.130.192.233</code>."),
+         "• <b>Por Red Local (Wi-Fi):</b> IP de la máquina principal: <code><IP_LOCAL_LAN></code>.<br/>"
+         "  Cadena: <code>mongodb://<IP_LOCAL_LAN>:27017/ecommerce_analytics?replicaSet=rs0</code><br/>"
+         "  Dashboard: <code>http://<IP_LOCAL_LAN>:3000</code><br/>"
+         "• <b>Por ZeroTier VPN:</b> IP: <code><IP_ZEROTIER_O_VPN></code>."),
 
         ("Paso 8: Procedimiento de Detención Segura y Limpieza Final",
          "• Detener backend y simulador con Ctrl + C.<br/>"

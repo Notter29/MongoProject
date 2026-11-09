@@ -12,9 +12,8 @@ Este PC de escritorio cuenta con las siguientes interfaces de red:
 
 | Tipo de Red | Dirección IP del PC de Escritorio | Cuándo Usarla |
 | :--- | :---: | :--- |
-| **VPN ZeroTier (Activa en este PC)** | `10.130.192.233` | Si unes el portátil a la misma red de ZeroTier. |
-| **VPN Tailscale (Recomendada)** | `100.x.y.z` | Si instalas Tailscale en ambos equipos e inicias sesión con tu misma cuenta. |
-| **Red Local (LAN Casa)** | `192.168.1.13` | Para realizar pruebas previas desde el portátil dentro de tu misma casa. |
+| **VPN ZeroTier / Tailscale** | `<IP_VPN_O_ZEROTIER>` | Si unes el portátil a la misma VPN (ZeroTier o Tailscale). |
+| **Red Local (LAN Casa / Wi-Fi)** | `<IP_LOCAL_LAN>` | Para realizar pruebas previas desde el portátil dentro de tu misma red. |
 
 ---
 
