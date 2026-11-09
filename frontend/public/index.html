@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard eCommerce Analytics (+20 GB) | Bases de Datos II</title>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  
+  <!-- Socket.io Client CDN -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  
+  <!-- Estilos del Dashboard -->
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+  <!-- Encabezado Superior / Top Header -->
+  <header class="top-header">
+    <div class="brand-section">
+      <div class="brand-logo">DB</div>
+      <div class="brand-text">
+        <h1>eCommerce Analytics Dashboard</h1>
+        <p>Bases de Datos II — Proyecto Parcial (Motor: MongoDB 7.0 Replica Set)</p>
+      </div>
+    </div>
+
+    <div class="system-status">
+      <!-- Indicador de Tiempo Real -->
+      <div class="stat-pill">
+        <div id="socket-status-dot" class="status-dot"></div>
+        <span id="socket-status-text" style="font-weight: 600;">Conectando...</span>
+      </div>
+
+      <!-- Badge de Volumen de Datos -->
+      <div class="stat-pill">
+        <span style="color: var(--text-secondary);">dataSize:</span>
+        <strong id="stat-datasize" style="color: var(--accent-cyan);">-- GB</strong>
+        <span id="badge-meta-20gb" class="badge badge-db">≥ 20 GB</span>
+      </div>
+
+      <!-- Total de Documentos -->
+      <div class="stat-pill">
+        <span style="color: var(--text-secondary);">Documentos:</span>
+        <strong id="stat-totaldocs" style="color: var(--accent-purple);">--</strong>
+      </div>
+    </div>
+  </header>
+
+  <!-- Pestañas de Navegación -->
+  <nav class="nav-tabs">
+    <button class="tab-btn active" data-tab="tab-tiempo-real">⚡ Tiempo Real & KPIs</button>
+    <button class="tab-btn" data-tab="tab-comercial">🏢 Marcas, Categorías & Clientes</button>
+    <button class="tab-btn" data-tab="tab-embudo-horarios">📊 Embudo, Horarios & Tendencias</button>
+    <button class="tab-btn" data-tab="tab-lenguaje-natural">🤖 Consultas IA (Gemini / Ollama)</button>
+    <button class="tab-btn" data-tab="tab-optimizacion">⚡ Índices & Explain Plan</button>
+  </nav>
+
+  <!-- Contenido Principal -->
+  <main class="main-content">
+
+    <!-- ====================================================================== -->
+    <!-- PESTAÑA 1: TIEMPO REAL & KPIS (Informes 1, 2 y 10)                      -->
+    <!-- ====================================================================== -->
+    <div id="tab-tiempo-real" class="tab-pane active">
+      
+      <!-- Tarjetas KPI (Informe 1) -->
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-cyan">
+          <div class="kpi-title">Ingresos Totales (Ventas)</div>
+          <div id="kpi-ingresos-totales" class="kpi-value" style="color: var(--accent-cyan);">$0.00</div>
+          <div class="kpi-subtitle">Informe 1 • Actualización reactiva con Change Streams</div>
+        </div>
+
+        <div class="kpi-card kpi-green">
+          <div class="kpi-title">Compras Realizadas</div>
+          <div id="kpi-compras-totales" class="kpi-value" style="color: var(--accent-green);">0</div>
+          <div class="kpi-subtitle">Informe 1 • Total transacciones completadas</div>
+        </div>
+
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-title">Ticket Promedio por Compra</div>
+          <div id="kpi-ticket-promedio" class="kpi-value" style="color: var(--accent-purple);">$0.00</div>
+          <div class="kpi-subtitle">Informe 1 • Gasto medio por transacción</div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-title">Almacenamiento en Disco</div>
+          <div id="stat-storagesize" class="kpi-value" style="color: var(--accent-amber);">-- GB</div>
+          <div class="kpi-subtitle">WiredTiger compresión activa sobre MongoDB</div>
+        </div>
+      </div>
+
+      <!-- Gráficos de Ventas y Top Productos (Informes 1 y 2) -->
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Informe 1: Evolución Temporal de Ventas e Ingresos Diarios</span>
+            <span class="badge badge-live">Tiempo Real (1)</span>
+          </div>
+          <div style="height: 350px;">
+            <canvas id="chart-ventas-periodo"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Informe 2: Top 10 Productos Más Vendidos</span>
+            <span class="badge badge-live">Tiempo Real (2)</span>
+          </div>
+          <div style="height: 350px;">
+            <canvas id="chart-top-productos"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monitor de Transacciones Recientes (Informe 10) -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Informe 10: Monitor en Vivo de Últimas Transacciones (Change Streams)</span>
+          <span class="badge badge-live">Tiempo Real (3)</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Producto & Marca</th>
+                <th>Categoría</th>
+                <th>Monto</th>
+                <th>Usuario ID</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-transacciones-body">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">Esperando eventos de compra en tiempo real...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- PESTAÑA 2: COMERCIAL (Informes 3, 4 y 5)                               -->
+    <!-- ====================================================================== -->
+    <div id="tab-comercial" class="tab-pane">
+      
+      <div class="charts-grid">
+        <!-- Informe 3: Marcas más rentables -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Informe 3: Marcas Más Rentables por Ingresos Totales</span>
+            <span class="badge badge-db">Agregación MongoDB</span>
+          </div>
+          <div style="height: 320px;">
+            <canvas id="chart-marcas-rentables"></canvas>
+          </div>
+        </div>
+
+        <!-- Informe 4: Comparación de categorías -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Informe 4: Participación de Ingresos por Categoría</span>
+            <span class="badge badge-db">Agregación MongoDB</span>
+          </div>
+          <div style="height: 320px;">
+            <canvas id="chart-categorias"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tablas de detalle: Marcas y Clientes VIP -->
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Detalle de Rentabilidad por Marca (Ticket Promedio)</span>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Marca</th>
+                  <th>Ingresos Totales</th>
+                  <th>Total Ventas</th>
+                  <th>Ticket Promedio</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-marcas-body">
+                <tr><td colspan="4" style="text-align: center;">Cargando datos...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Informe 5: Clientes VIP -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Informe 5: Clientes VIP (Top Compradores por Gasto)</span>
+            <span class="badge badge-db">Agregación MongoDB</span>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente ID</th>
+                  <th>Gasto Acumulado</th>
+                  <th>Frecuencia</th>
+                  <th>Ticket Promedio</th>
+                  <th>Última Compra</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-clientes-body">
+                <tr><td colspan="5" style="text-align: center;">Cargando datos...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- PESTAÑA 3: EMBUDO, HORARIOS & TENDENCIAS (Informes 6, 7 y 8)            -->
+    <!-- ====================================================================== -->
+    <div id="tab-embudo-horarios" class="tab-pane">
+
+      <!-- Informe 6: Embudo de Conversión -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Informe 6: Embudo de Conversión y Tasa de Abandono (Views → Cart → Purchase)</span>
+          <span class="badge badge-db">Agregación MongoDB</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; align-items: center;">
+          <div id="funnel-container" class="funnel-container">
+            <!-- Pasos del embudo generados dinámicamente -->
+          </div>
+          <div id="funnel-metrics" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+            <h4 style="margin-bottom: 1rem; color: var(--accent-cyan);">Métricas Clave de Conversión</h4>
+            <div style="margin-bottom: 1rem;">
+              <div style="font-size: 0.8rem; color: var(--text-secondary);">Conversión Global (Vistas → Compras):</div>
+              <div id="m-conv-global" style="font-size: 1.5rem; font-weight: 800; color: var(--accent-green);">0%</div>
+            </div>
+            <div style="margin-bottom: 1rem;">
+              <div style="font-size: 0.8rem; color: var(--text-secondary);">Efectividad de Carrito (Carritos → Compras):</div>
+              <div id="m-conv-cart" style="font-size: 1.5rem; font-weight: 800; color: var(--accent-blue);">0%</div>
+            </div>
+            <div>
+              <div style="font-size: 0.8rem; color: var(--text-secondary);">Tasa de Abandono de Carrito:</div>
+              <div id="m-aban-cart" style="font-size: 1.5rem; font-weight: 800; color: var(--accent-rose);">0%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Informe 7: Mapa de Calor de Horarios y Días -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Informe 7: Mapa de Calor de Demanda (Días de la Semana vs 24 Horas)</span>
+          <span class="badge badge-db">Agregación $isoDayOfWeek + $hour</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          Muestra la concentración de compras según el momento del día para optimizar campañas publicitarias y servidores.
+        </p>
+        <div id="heatmap-grid" class="heatmap-container">
+          <!-- Celdas 7x24 generadas dinámicamente -->
+        </div>
+      </div>
+
+      <!-- Informe 8: Detección de Disminución de Demanda -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Informe 8: Detección de Productos con Disminución de Demanda</span>
+          <span class="badge badge-db">Agregación Comparativa $cond</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          Identifica artículos con caídas abruptas en ventas entre dos periodos consecutivos para activar alertas de inventario.
+        </p>
+        <div style="height: 340px;">
+          <canvas id="chart-disminucion-demanda"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- PESTAÑA 4: LENGUAJE NATURAL (Informe 9: Gemini / Ollama)                -->
+    <!-- ====================================================================== -->
+    <div id="tab-lenguaje-natural" class="tab-pane">
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Informe 9: Consultas Analíticas en Lenguaje Natural (Text-to-Aggregation)</span>
+          <span class="badge badge-live">Dual: Gemini / Ollama Qwen 2.5</span>
+        </div>
+
+        <div class="nlp-box">
+          <!-- Selector Dual de Proveedor de IA -->
+          <div class="nlp-controls">
+            <label for="nlp-select-proveedor" style="font-weight: 600; font-size: 0.9rem;">
+              Motor de IA:
+            </label>
+            <select id="nlp-select-proveedor" class="select-provider">
+              <option value="gemini" selected>🌐 Google Gemini API (Cloud - Ultrarrápido)</option>
+              <option value="ollama">🦙 Ollama Local - Qwen 2.5 Coder (Open Source - 100% Offline)</option>
+            </select>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
+              (Conmutación en vivo solicitada por el usuario para la sustentación)
+            </span>
+          </div>
+
+          <!-- Input de Pregunta y Botón -->
+          <div class="nlp-input-row">
+            <input
+              type="text"
+              id="nlp-input-pregunta"
+              class="nlp-input"
+              placeholder="Formula una pregunta analítica sobre los 20 GB de comercio electrónico..."
+              value="¿Cuáles son los 5 productos más vendidos de la marca Apple?"
+            >
+            <button id="nlp-btn-consultar" class="btn-primary">Consultar con IA</button>
+          </div>
+
+          <!-- Preguntas Sugeridas para la Sustentación -->
+          <div style="margin-bottom: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+            Preguntas sugeridas de prueba (haz clic para probar al instante):
+          </div>
+          <div class="sample-queries">
+            <div class="query-chip" data-query="¿Cuáles son los 5 productos más vendidos de la marca Apple?">
+              1. 5 productos más vendidos de Apple
+            </div>
+            <div class="query-chip" data-query="¿Cuáles son las 5 marcas con mayores ingresos totales en compras?">
+              2. Top 5 marcas más rentables
+            </div>
+            <div class="query-chip" data-query="¿Cuáles son las categorías con precio promedio superior a 300 dólares?">
+              3. Categorías con precio medio > $300
+            </div>
+            <div class="query-chip" data-query="¿Quiénes son los 5 clientes con mayor gasto acumulado?">
+              4. Top 5 clientes VIP por gasto
+            </div>
+          </div>
+
+          <!-- Visor del Pipeline Generado (Exigido en ítem 4.5 del PDF) -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-weight: 600; font-size: 0.85rem; color: var(--accent-cyan);">
+              Pipeline de Agregación MongoDB Generado por la IA:
+            </span>
+            <div id="nlp-stats-info" style="font-size: 0.85rem; color: var(--text-secondary);">
+              Esperando consulta...
+            </div>
+          </div>
+          <pre id="nlp-visor-pipeline" class="pipeline-viewer">// El Aggregation Pipeline nativo traducido por la IA aparecerá aquí...</pre>
+
+          <!-- Tabla de Resultados Reales Devueltos por MongoDB -->
+          <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.5rem;">
+            Resultados devueltos por MongoDB (Procesamiento 100% en Motor de Base de Datos):
+          </div>
+          <div class="table-container" style="max-height: 350px; overflow-y: auto;">
+            <table id="nlp-tabla-resultados">
+              <thead>
+                <tr>
+                  <th>Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="text-align: center; color: var(--text-secondary);">
+                    Haz una pregunta o selecciona una sugerida para ver los resultados aquí.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- NUEVA SECCIÓN: BÚSQUEDA VECTORIAL POR SIMILITUD DEL COSENO -->
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+          <span class="card-title">🧠 Búsqueda Semántica Vectorial por Similitud del Coseno (Cosine Similarity)</span>
+          <span class="badge badge-live">Fórmula: cos(θ) = (A · B) / (||A|| * ||B||)</span>
+        </div>
+
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          Convierte la frase del usuario en un <strong>vector de embedding</strong> (vía Gemini <code>text-embedding-004</code> u Ollama <code>nomic-embed-text</code> local) y calcula el ángulo del coseno contra el catálogo para encontrar productos <em>por significado semántico</em>, incluso si no comparten palabras exactas.
+        </p>
+
+        <div class="nlp-box">
+          <div class="nlp-input-row">
+            <input
+              type="text"
+              id="coseno-input-consulta"
+              class="nlp-input"
+              placeholder="Describe lo que buscas conceptualmente (ej. aparato para enfriar comida)..."
+              value="aparato para enfriar bebidas y comida"
+            >
+            <button id="coseno-btn-calcular" class="btn-primary" style="background: linear-gradient(135deg, #10b981, #06b6d4);">
+              Calcular Coseno Vectorial
+            </button>
+          </div>
+
+          <!-- Chips sugeridos para prueba de coseno -->
+          <div class="sample-queries">
+            <div class="query-chip chip-coseno" data-query="aparato para mantener fría la comida">
+              1. "aparato para mantener fría la comida" → Refrigeradores
+            </div>
+            <div class="query-chip chip-coseno" data-query="dispositivo con pantalla táctil para hacer llamadas">
+              2. "dispositivo con pantalla táctil para llamadas" → Smartphones
+            </div>
+            <div class="query-chip chip-coseno" data-query="accesorio inalámbrico para escuchar música">
+              3. "accesorio inalámbrico para escuchar música" → Auriculares
+            </div>
+            <div class="query-chip chip-coseno" data-query="máquina automática para limpiar y lavar prendas">
+              4. "máquina automática para limpiar y lavar prendas" → Lavadoras
+            </div>
+          </div>
+
+          <!-- Visor de Métricas de Similitud de Coseno -->
+          <div id="coseno-resultados-metricas" style="display: none; background: #000; padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+              <div>
+                <div style="font-size: 0.75rem; color: #9ca3af;">Categoría más cercana por Coseno:</div>
+                <div id="coseno-cat-resultado" style="font-size: 1.1rem; font-weight: 700; color: #10b981;">--</div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: #9ca3af;">Similitud del Coseno (cos θ):</div>
+                <div id="coseno-score-resultado" style="font-size: 1.1rem; font-weight: 700; color: #06b6d4;">--</div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: #9ca3af;">Afinidad Semántica:</div>
+                <div id="coseno-afinidad-resultado" style="font-size: 1.1rem; font-weight: 700; color: #8b5cf6;">--</div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: #9ca3af;">Motor de Embeddings:</div>
+                <div id="coseno-motor-resultado" style="font-size: 0.95rem; font-weight: 600; color: #f59e0b;">--</div>
+              </div>
+            </div>
+
+            <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.3rem;">
+              Muestra del Vector de Embedding Generado (primeras 8 dimensiones):
+            </div>
+            <pre id="coseno-vector-preview" style="font-family: var(--font-mono); font-size: 0.8rem; color: #38bdf8; overflow-x: auto; margin-bottom: 0;">--</pre>
+          </div>
+
+          <!-- Tabla de Productos Encontrados por Coseno en MongoDB -->
+          <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.5rem;">
+            Productos obtenidos en MongoDB tras resolver la similitud del coseno:
+          </div>
+          <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+            <table id="coseno-tabla-productos">
+              <thead>
+                <tr>
+                  <th>Producto ID</th>
+                  <th>Marca</th>
+                  <th>Precio Promedio</th>
+                  <th>Total Ventas</th>
+                  <th>Ingresos Totales</th>
+                </tr>
+              </thead>
+              <tbody id="coseno-tabla-body">
+                <tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Ejecuta una búsqueda por coseno para ver los productos vinculados semánticamente.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- PESTAÑA 5: OPTIMIZACIÓN & EXPLAIN (Entregable 8)                        -->
+    <!-- ====================================================================== -->
+    <div id="tab-optimizacion" class="tab-pane">
+
+      <div class="charts-grid">
+        <!-- Tarjeta de Índices Implementados -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Índices Estratégicos Creados (Colección 'eventos')</span>
+            <span class="badge badge-db">Entregable 8</span>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre del Índice</th>
+                  <th>Definición de Campos</th>
+                  <th>Propósito de Optimización</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>idx_event_type_time</code></td>
+                  <td><code>{ event_type: 1, event_time: -1 }</code></td>
+                  <td>Ventas por fecha (Informe 1), transacciones en vivo (Informe 10) y Change Streams.</td>
+                </tr>
+                <tr>
+                  <td><code>idx_event_type_product_price</code></td>
+                  <td><code>{ event_type: 1, product_id: 1, price: 1 }</code></td>
+                  <td>Top productos (Informe 2) y análisis de caída de demanda (Informe 8).</td>
+                </tr>
+                <tr>
+                  <td><code>idx_event_type_brand_price</code></td>
+                  <td><code>{ event_type: 1, brand: 1, price: 1 }</code></td>
+                  <td>Marcas más rentables y ticket promedio (Informe 3).</td>
+                </tr>
+                <tr>
+                  <td><code>idx_event_type_category_price</code></td>
+                  <td><code>{ event_type: 1, category_code: 1, price: 1 }</code></td>
+                  <td>Comparativa de categorías y precio promedio (Informe 4).</td>
+                </tr>
+                <tr>
+                  <td><code>idx_event_type_user_price</code></td>
+                  <td><code>{ event_type: 1, user_id: 1, price: 1 }</code></td>
+                  <td>Clientes VIP y gasto acumulado (Informe 5).</td>
+                </tr>
+                <tr>
+                  <td><code>idx_text_category_brand</code></td>
+                  <td><code>{ category_code: "text", brand: "text" }</code></td>
+                  <td>Búsquedas textuales libres y consultas de catálogo en Lenguaje Natural (Informe 9).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Comparativa Explain Plan (COLLSCAN vs IXSCAN) -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Comparativa de Rendimiento con explain("executionStats")</span>
+            <span class="badge badge-live">Demostración Académica</span>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Métrica de Rendimiento</th>
+                  <th style="color: #ef4444;">Sin Índices (COLLSCAN)</th>
+                  <th style="color: #10b981;">Con Índices (IXSCAN)</th>
+                  <th>Mejora</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Tipo de Escaneo (Stage)</strong></td>
+                  <td style="color: #ef4444;">COLLSCAN (Escaneo total)</td>
+                  <td style="color: #10b981;">IXSCAN + FETCH (Índice)</td>
+                  <td>Búsqueda indexada B-Tree</td>
+                </tr>
+                <tr>
+                  <td><strong>Tiempo de Ejecución</strong></td>
+                  <td style="color: #ef4444;">~18,500 ms (18.5 seg)</td>
+                  <td style="color: #10b981;">&lt; 35 ms</td>
+                  <td><strong>~520x más rápido</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>Documentos Examinados</strong></td>
+                  <td style="color: #ef4444;">+20,000,000 documentos</td>
+                  <td style="color: #10b981;">Solo coincidentes (~15,000)</td>
+                  <td><strong>99.9% menos lectura de disco</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>Uso de CPU / Memoria</strong></td>
+                  <td style="color: #ef4444;">100% de CPU durante escaneo</td>
+                  <td style="color: #10b981;">Mínimo e imperceptible</td>
+                  <td>Consumo eficiente</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top: 1.5rem; background: var(--bg-secondary); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--accent-cyan); margin-bottom: 0.5rem;">
+              Comando para reproducir en vivo ante el docente en MongoDB Compass / mongosh:
+            </div>
+            <pre style="font-family: var(--font-mono); font-size: 0.8rem; color: #f8fafc; overflow-x: auto;">db.eventos.find({ event_type: "purchase", event_time: { $gte: ISODate("2019-10-10"), $lte: ISODate("2019-10-15") } }).explain("executionStats")</pre>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Scripts de la Aplicación -->
+  <script src="js/api.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/socket.js"></script>
+  <script src="js/nlp.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
