@@ -141,6 +141,119 @@ class EventosRepository {
     return (await obtenerReporteMaterializado('reporte8')).slice(0, Number(limite));
   }
 
+  async ejecutarConsultaGuiada(tipo) {
+    const pipelines = {
+      zonas: [
+        { $match: { _id: REPORTS_ID } },
+        { $unwind: '$reporte2' },
+        { $sort: { 'reporte2.viajes': -1 } },
+        { $limit: 10 },
+        {
+          $project: {
+            _id: '$reporte2.location_id',
+            zona: '$reporte2.zona',
+            borough: '$reporte2.borough',
+            viajes: '$reporte2.viajes',
+            ingresos: '$reporte2.ingresos'
+          }
+        }
+      ],
+      rutas: [
+        { $match: { _id: REPORTS_ID } },
+        { $unwind: '$reporte3' },
+        { $sort: { 'reporte3.viajes': -1 } },
+        { $limit: 10 },
+        {
+          $project: {
+            _id: {
+              origen: '$reporte3.pickup_location_id',
+              destino: '$reporte3.dropoff_location_id'
+            },
+            origen_nombre: '$reporte3.origen',
+            destino_nombre: '$reporte3.destino',
+            viajes: '$reporte3.viajes',
+            ingresos: '$reporte3.ingresos',
+            distancia_promedio: '$reporte3.distancia_promedio'
+          }
+        }
+      ],
+      ingresos_mensuales: [
+        { $match: { _id: REPORTS_ID } },
+        { $unwind: '$reporte1.serie_diaria' },
+        {
+          $project: {
+            fecha: { $dateFromString: { dateString: '$reporte1.serie_diaria.fecha' } },
+            viajes: '$reporte1.serie_diaria.viajes',
+            ingresos: '$reporte1.serie_diaria.ingresos'
+          }
+        },
+        {
+          $group: {
+            _id: {
+              anio: { $year: '$fecha' },
+              mes: { $month: '$fecha' }
+            },
+            viajes: { $sum: '$viajes' },
+            ingresos: { $sum: '$ingresos' }
+          }
+        },
+        { $sort: { '_id.anio': 1, '_id.mes': 1 } },
+        {
+          $project: {
+            _id: 1,
+            viajes: 1,
+            ingresos: { $round: ['$ingresos', 2] }
+          }
+        }
+      ],
+      propinas: [
+        { $match: { _id: REPORTS_ID } },
+        { $unwind: '$reporte8' },
+        { $sort: { 'reporte8.porcentaje_propina': -1 } },
+        { $limit: 10 },
+        {
+          $project: {
+            _id: '$reporte8.location_id',
+            zona: '$reporte8.zona',
+            borough: '$reporte8.borough',
+            viajes: '$reporte8.viajes',
+            propinas: '$reporte8.propinas',
+            porcentaje_propina: '$reporte8.porcentaje_propina'
+          }
+        }
+      ],
+      pagos: [
+        { $match: { _id: REPORTS_ID } },
+        { $unwind: '$reporte5' },
+        { $sort: { 'reporte5.viajes': -1 } },
+        {
+          $project: {
+            _id: '$reporte5.payment_type',
+            viajes: '$reporte5.viajes',
+            ingresos: '$reporte5.ingresos',
+            tarifa_promedio: '$reporte5.tarifa_promedio'
+          }
+        }
+      ]
+    };
+    const pipeline = pipelines[tipo];
+    if (!pipeline) {
+      throw new Error('La consulta guiada solicitada no está disponible.');
+    }
+
+    const started = Date.now();
+    const resultados = await getDB()
+      .collection(REPORTS_COLLECTION)
+      .aggregate(pipeline)
+      .toArray();
+    return {
+      pipeline,
+      tiempo_ms: Date.now() - started,
+      total_resultados: resultados.length,
+      resultados
+    };
+  }
+
   async ejecutarPipelineSeguro(pipeline) {
     const started = Date.now();
     const resultados = await getEventosCollection()

@@ -313,7 +313,7 @@
               <option value="ollama">🦙 Ollama Local - Qwen 2.5 Coder (Open Source - 100% Offline)</option>
             </select>
             <span style="font-size: 0.8rem; color: var(--text-muted);">
-              (Conmutación en vivo solicitada por el usuario para la sustentación)
+              Si no hay proveedor de IA configurado, puedes usar las consultas sugeridas con los análisis locales.
             </span>
           </div>
 
@@ -350,8 +350,8 @@
 
           <!-- Visor del Pipeline Generado (Exigido en ítem 4.5 del PDF) -->
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <span style="font-weight: 600; font-size: 0.85rem; color: var(--accent-cyan);">
-              Pipeline de Agregación MongoDB Generado por la IA:
+            <span id="nlp-pipeline-title" style="font-weight: 600; font-size: 0.85rem; color: var(--accent-cyan);">
+              Pipeline generado o consulta guiada:
             </span>
             <div id="nlp-stats-info" style="font-size: 0.85rem; color: var(--text-secondary);">
               Esperando consulta...

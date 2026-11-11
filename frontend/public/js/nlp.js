@@ -3,6 +3,7 @@ function inicializarModuloNLP() {
   const button = document.getElementById('nlp-btn-consultar');
   const provider = document.getElementById('nlp-select-proveedor');
   const pipeline = document.getElementById('nlp-visor-pipeline');
+  const pipelineTitle = document.getElementById('nlp-pipeline-title');
   const stats = document.getElementById('nlp-stats-info');
   const results = document.getElementById('nlp-tabla-resultados');
 
@@ -26,6 +27,9 @@ function inicializarModuloNLP() {
     try {
       const data = await api.postInforme9NLP(question, provider.value);
       pipeline.textContent = JSON.stringify(data.pipeline_generado, null, 2);
+      pipelineTitle.textContent = data.modo_consulta === 'resumen_materializado'
+        ? 'Consulta guiada sobre informes materializados en MongoDB:'
+        : 'Pipeline generado por IA:';
       stats.textContent =
         `${data.proveedor_utilizado} · ${data.tiempo_ejecucion_ms} ms · ` +
         `${data.total_resultados} resultados`;
