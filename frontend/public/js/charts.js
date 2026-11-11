@@ -4,28 +4,34 @@
  */
 
 let chartVentas = null;
-let chartTopProductos = null;
-let chartMarcas = null;
-let chartCategorias = null;
-let chartDisminucion = null;
+let chartTopZonas = null;
+let chartRutas = null;
+let chartIngresosDistritos = null;
+let chartPropinas = null;
+let chartDistancias = null;
 
 const chartColors = {
-  cyan: '#06b6d4',
-  blue: '#3b82f6',
-  purple: '#8b5cf6',
-  green: '#10b981',
-  amber: '#f59e0b',
+  cyan: '#171717',
+  blue: '#46515d',
+  purple: '#8a929a',
+  green: '#262626',
+  amber: '#e3ad00',
   rose: '#f43f5e',
-  grid: '#374151',
-  text: '#9ca3af'
+  grid: '#e3e5e8',
+  text: '#5f6368'
 };
+const chartPalette = [
+  '#171717', '#e3ad00', '#46515d', '#8a929a', '#b7bdc3',
+  '#6f7881', '#d3a400', '#303840', '#9da3a9', '#555d65',
+  '#d8dadd', '#818991'
+];
 
 // Configuración común de Chart.js
 Chart.defaults.color = chartColors.text;
 Chart.defaults.borderColor = chartColors.grid;
 Chart.defaults.font.family = "'Inter', sans-serif";
 
-function renderChartVentas(ctx, labels, dataIngresos, dataCompras) {
+function renderChartVentas(ctx, labels, dataIngresos, dataViajes) {
   if (chartVentas) chartVentas.destroy();
 
   chartVentas = new Chart(ctx, {
@@ -37,14 +43,14 @@ function renderChartVentas(ctx, labels, dataIngresos, dataCompras) {
           label: 'Ingresos Diarios ($ USD)',
           data: dataIngresos,
           borderColor: chartColors.cyan,
-          backgroundColor: 'rgba(6, 182, 212, 0.1)',
+          backgroundColor: 'rgba(23, 23, 23, 0.08)',
           fill: true,
           tension: 0.3,
           yAxisID: 'y'
         },
         {
-          label: 'Cantidad de Compras',
-          data: dataCompras,
+          label: 'Viajes',
+          data: dataViajes,
           borderColor: chartColors.purple,
           backgroundColor: 'transparent',
           borderDash: [5, 5],
@@ -77,18 +83,18 @@ function renderChartVentas(ctx, labels, dataIngresos, dataCompras) {
   });
 }
 
-function renderChartTopProductos(ctx, labels, dataUnidades, dataIngresos) {
-  if (chartTopProductos) chartTopProductos.destroy();
+function renderChartTopZonas(ctx, labels, dataViajes) {
+  if (chartTopZonas) chartTopZonas.destroy();
 
-  chartTopProductos = new Chart(ctx, {
+  chartTopZonas = new Chart(ctx, {
     type: 'bar',
     data: {
       labels,
       datasets: [
         {
-          label: 'Unidades Vendidas',
-          data: dataUnidades,
-          backgroundColor: 'rgba(59, 130, 246, 0.75)',
+          label: 'Viajes',
+          data: dataViajes,
+          backgroundColor: 'rgba(70, 81, 93, 0.78)',
           borderRadius: 6
         }
       ]
@@ -104,21 +110,18 @@ function renderChartTopProductos(ctx, labels, dataUnidades, dataIngresos) {
   });
 }
 
-function renderChartMarcas(ctx, labels, dataIngresos) {
-  if (chartMarcas) chartMarcas.destroy();
+function renderChartRutas(ctx, labels, dataViajes) {
+  if (chartRutas) chartRutas.destroy();
 
-  chartMarcas = new Chart(ctx, {
+  chartRutas = new Chart(ctx, {
     type: 'bar',
     data: {
       labels,
       datasets: [
         {
-          label: 'Ingresos Totales ($ USD)',
-          data: dataIngresos,
-          backgroundColor: [
-            '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e',
-            '#f59e0b', '#10b981', '#14b8a6', '#6366f1', '#a855f7'
-          ],
+          label: 'Viajes',
+          data: dataViajes,
+          backgroundColor: chartPalette.slice(0, 10),
           borderRadius: 6
         }
       ]
@@ -130,33 +133,25 @@ function renderChartMarcas(ctx, labels, dataIngresos) {
         legend: { display: false }
       },
       scales: {
-        y: {
-          ticks: {
-            callback: (val) => '$' + Number(val).toLocaleString()
-          }
-        }
+        y: { beginAtZero: true }
       }
     }
   });
 }
 
-function renderChartCategorias(ctx, labels, dataIngresos) {
-  if (chartCategorias) chartCategorias.destroy();
+function renderChartIngresosDistritos(ctx, labels, dataIngresos) {
+  if (chartIngresosDistritos) chartIngresosDistritos.destroy();
 
-  chartCategorias = new Chart(ctx, {
+  chartIngresosDistritos = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels,
       datasets: [
         {
           data: dataIngresos,
-          backgroundColor: [
-            '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e',
-            '#f59e0b', '#10b981', '#14b8a6', '#6366f1', '#a855f7',
-            '#64748b', '#78716c'
-          ],
+          backgroundColor: chartPalette,
           borderWidth: 2,
-          borderColor: '#1f2937'
+          borderColor: '#181818'
         }
       ]
     },
@@ -170,24 +165,18 @@ function renderChartCategorias(ctx, labels, dataIngresos) {
   });
 }
 
-function renderChartDisminucion(ctx, labels, dataP1, dataP2) {
-  if (chartDisminucion) chartDisminucion.destroy();
+function renderChartPropinas(ctx, labels, dataPorcentajes) {
+  if (chartPropinas) chartPropinas.destroy();
 
-  chartDisminucion = new Chart(ctx, {
+  chartPropinas = new Chart(ctx, {
     type: 'bar',
     data: {
       labels,
       datasets: [
         {
-          label: 'Periodo 1 (Antes)',
-          data: dataP1,
-          backgroundColor: 'rgba(16, 185, 129, 0.7)',
-          borderRadius: 6
-        },
-        {
-          label: 'Periodo 2 (Caída)',
-          data: dataP2,
-          backgroundColor: 'rgba(244, 63, 94, 0.7)',
+          label: 'Propina como % de tarifa',
+          data: dataPorcentajes,
+          backgroundColor: 'rgba(227, 173, 0, 0.78)',
           borderRadius: 6
         }
       ]
@@ -198,6 +187,27 @@ function renderChartDisminucion(ctx, labels, dataP1, dataP2) {
       plugins: {
         legend: { position: 'top' }
       }
+    }
+  });
+}
+
+function renderChartDistancias(ctx, labels, dataViajes) {
+  if (chartDistancias) chartDistancias.destroy();
+  chartDistancias = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Viajes',
+        data: dataViajes,
+        backgroundColor: 'rgba(70, 81, 93, 0.78)',
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } }
     }
   });
 }

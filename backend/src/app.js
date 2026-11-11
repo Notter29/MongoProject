@@ -48,9 +48,9 @@ app.get('*', (req, res, next) => {
   }
   res.send(`
     <html>
-      <head><title>API Backend Activa</title></head>
+      <head><title>NYC Taxi API Activa</title></head>
       <body style="font-family: sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc;">
-        <h2>🚀 Backend API de eCommerce Analytics Activo</h2>
+    <h2>Backend API de NYC Taxi Analytics Activo</h2>
         <p>MongoDB Replica Set y WebSocket Socket.io operativos en <code>http://0.0.0.0:3000</code>.</p>
         <p>Consulta los endpoints en <a style="color: #38bdf8;" href="/api/stats">/api/stats</a></p>
       </body>

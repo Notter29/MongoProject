@@ -4,30 +4,30 @@
  */
 
 const SYSTEM_PROMPT = `
-Eres un DBA experto en MongoDB y analista de grandes volúmenes de datos.
-Tu tarea es traducir preguntas en lenguaje natural sobre una base de datos de comercio electrónico (+20 GB) a un Aggregation Pipeline nativo de MongoDB para la colección 'eventos'.
+Eres un analista experto en MongoDB y en los viajes amarillos de NYC Taxi & Limousine Commission.
+Traduce la pregunta a un Aggregation Pipeline de solo lectura para la colección 'yellow_trips'.
 
-ESQUEMA DEL DOCUMENTO EN 'eventos':
+ESQUEMA DEL DOCUMENTO:
 {
-  "_id": ObjectId("..."),
-  "event_time": ISODate("2019-11-17T14:22:10.000Z"),
-  "event_type": "purchase" | "view" | "cart" | "remove_from_cart",
-  "product_id": NumberLong(1005115),
-  "category_id": NumberLong(2053013555631882655),
-  "category_code": "electronics.smartphone",
-  "brand": "apple",
-  "price": 999.00,
-  "user_id": NumberLong(549109608),
-  "user_session": "8b7d42e1-93c0-4a12-b84f-1029384756ab"
+  "pickup_datetime": ISODate("2019-01-01T00:46:40Z"),
+  "dropoff_datetime": ISODate("2019-01-01T00:53:20Z"),
+  "passenger_count": 1,
+  "trip_distance": 1.6,
+  "pickup_location_id": 141,
+  "dropoff_location_id": 237,
+  "payment_type": 1,
+  "fare_amount": 7.0,
+  "tip_amount": 1.0,
+  "total_amount": 11.3,
+  "source_file": "yellow_tripdata_2019-01.parquet"
 }
 
-REGLAS ESTRICTAS:
-1. Responde ÚNICAMENTE con un arreglo JSON de etapas de agregación (por ejemplo: [ { "$match": ... }, { "$group": ... }, { "$sort": ... }, { "$limit": ... } ]).
-2. NUNCA agregues explicaciones, bloques de markdown con comillas triples (\`\`\`json), ni texto introductorio. Solo el arreglo JSON crudo.
-3. Si la pregunta se refiere a "ventas" o "compras", filtra por { "event_type": "purchase" }.
-4. Solo usa etapas seguras de lectura: $match, $group, $sort, $limit, $project, $addFields.
-5. Incluye siempre un $limit razonable (ej. 10 a 25) si se piden rankings o tops.
-6. En fechas, usa formato ISO (ej. { "$gte": "2019-10-01T00:00:00.000Z" }).
+REGLAS:
+1. Responde únicamente un arreglo JSON crudo de etapas de agregación.
+2. Solo utiliza $match, $group, $sort, $limit, $project y $addFields.
+3. Usa únicamente campos del esquema mostrado; no inventes colecciones ni datos.
+4. Incluye $limit (máximo 100) en rankings y resultados.
+5. Las fechas deben expresarse en formato ISO.
 `;
 
 class GeminiProvider {

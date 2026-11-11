@@ -1,23 +1,35 @@
 /**
- * @file eventos.repository.js
- * @description Repositorio de acceso a datos para la colección 'eventos'.
- * 
- * REGLA ESTRICTA DE EVALUACIÓN:
- * Toda operación de búsqueda, filtrado, agregación, agrupamiento y ordenamiento
- * se ejecuta 100% en el motor de base de datos MongoDB mediante Aggregation Pipelines.
- * Cero filtrado con arrays en Node.js.
+ * MongoDB aggregations for the NYC TLC yellow-taxi trip dataset.
  */
 
 const { getEventosCollection, getDB } = require('../config/db');
 
+const ZONE_COLLECTION = 'taxi_zones';
+const REPORTS_COLLECTION = 'analytics_reports';
+const REPORTS_ID = 'nyc_tlc_yellow_2019_jan_aug';
+const DATASET_START = Date.UTC(2019, 0, 1);
+const DATASET_END = Date.UTC(2019, 8, 1);
+
+async function obtenerReporteMaterializado(nombre) {
+  const resumen = await getDB().collection(REPORTS_COLLECTION).findOne({ _id: REPORTS_ID });
+  if (!resumen || !Object.hasOwn(resumen, nombre)) {
+    throw new Error('Falta el resumen analítico. Ejecute database/scripts/materializar_reportes.js.');
+  }
+  return resumen[nombre];
+}
+
+function periodoDataset() {
+  return {
+    pickup_datetime: {
+      $gte: new Date(DATASET_START),
+      $lt: new Date(DATASET_END)
+    }
+  };
+}
+
 class EventosRepository {
-  /**
-   * Obtiene las estadísticas de almacenamiento de la base de datos (db.stats).
-   * @returns {Promise<Object>}
-   */
   async obtenerEstadisticasDB() {
-    const db = getDB();
-    const stats = await db.command({ dbStats: 1, scale: 1024 * 1024 * 1024 });
+    const stats = await getDB().command({ dbStats: 1, scale: 1024 ** 3 });
     return {
       dbName: stats.db,
       dataSizeGB: Number(stats.dataSize.toFixed(3)),
@@ -30,410 +42,150 @@ class EventosRepository {
     };
   }
 
-  /**
-   * INFORME 1 (Tiempo Real 1): Ventas totales e ingresos por fecha o periodo.
-   * Ejecuta agregación por día y calcula los KPIs globales del periodo.
-   * @param {Date} [fechaInicio]
-   * @param {Date} [fechaFin]
-   */
-  async obtenerVentasPorPeriodo(fechaInicio, fechaFin) {
-    const col = getEventosCollection();
-    const matchStage = { event_type: 'purchase' };
-
-    if (fechaInicio || fechaFin) {
-      matchStage.event_time = {};
-      if (fechaInicio) matchStage.event_time.$gte = new Date(fechaInicio);
-      if (fechaFin) matchStage.event_time.$lte = new Date(fechaFin);
+  async obtenerViajesPorPeriodo(fechaInicio, fechaFin) {
+    if (!fechaInicio && !fechaFin) {
+      return obtenerReporteMaterializado('reporte1');
     }
 
-    const pipeline = [
-      { $match: matchStage },
-      {
-        $facet: {
-          serie_diaria: [
-            {
-              $group: {
-                _id: { $dateToString: { format: '%Y-%m-%d', date: '$event_time' } },
-                total_compras: { $sum: 1 },
-                ingresos: { $sum: '$price' },
-                ticket_promedio: { $avg: '$price' }
-              }
-            },
-            { $sort: { _id: 1 } },
-            {
-              $project: {
-                fecha: '$_id',
-                _id: 0,
-                total_compras: 1,
-                ingresos: { $round: ['$ingresos', 2] },
-                ticket_promedio: { $round: ['$ticket_promedio', 2] }
-              }
-            }
-          ],
-          resumen_kpi: [
-            {
-              $group: {
-                _id: null,
-                ingresos_totales: { $sum: '$price' },
-                compras_totales: { $sum: 1 },
-                ticket_promedio_general: { $avg: '$price' }
-              }
-            },
-            {
-              $project: {
-                _id: 0,
-                ingresos_totales: { $round: ['$ingresos_totales', 2] },
-                compras_totales: 1,
-                ticket_promedio_general: { $round: ['$ticket_promedio_general', 2] }
-              }
-            }
-          ]
-        }
-      }
-    ];
+    const filtrosFecha = [periodoDataset()];
+    if (fechaInicio) filtrosFecha.push({ pickup_datetime: { $gte: new Date(fechaInicio) } });
+    if (fechaFin) filtrosFecha.push({ pickup_datetime: { $lte: new Date(fechaFin) } });
+    const match = filtrosFecha.length === 1 ? filtrosFecha[0] : { $and: filtrosFecha };
 
-    const result = await col.aggregate(pipeline).toArray();
-    const data = result[0] || { serie_diaria: [], resumen_kpi: [] };
-    const kpis = data.resumen_kpi[0] || { ingresos_totales: 0, compras_totales: 0, ticket_promedio_general: 0 };
-
-    return {
-      kpis,
-      serie_diaria: data.serie_diaria
-    };
-  }
-
-  /**
-   * INFORME 2 (Tiempo Real 2): Top productos más vendidos y sus ingresos asociados.
-   * @param {number} [limite=15]
-   */
-  async obtenerTopProductos(limite = 15) {
-    const col = getEventosCollection();
-    const pipeline = [
-      { $match: { event_type: 'purchase' } },
-      {
-        $group: {
-          _id: '$product_id',
-          unidades_vendidas: { $sum: 1 },
-          ingresos_generados: { $sum: '$price' },
-          precio_promedio: { $avg: '$price' },
-          categoria: { $first: '$category_code' },
-          marca: { $first: '$brand' }
-        }
-      },
-      { $sort: { unidades_vendidas: -1 } },
-      { $limit: Number(limite) },
-      {
-        $project: {
-          product_id: '$_id',
-          _id: 0,
-          unidades_vendidas: 1,
-          ingresos_generados: { $round: ['$ingresos_generados', 2] },
-          precio_promedio: { $round: ['$precio_promedio', 2] },
-          categoria: 1,
-          marca: 1
-        }
-      }
-    ];
-
-    return await col.aggregate(pipeline).toArray();
-  }
-
-  /**
-   * INFORME 3: Marcas más rentables y ticket promedio por marca.
-   * @param {number} [limite=15]
-   */
-  async obtenerMarcasRentables(limite = 15) {
-    const col = getEventosCollection();
-    const pipeline = [
-      { $match: { event_type: 'purchase', brand: { $ne: '' } } },
-      {
-        $group: {
-          _id: '$brand',
-          ingresos_totales: { $sum: '$price' },
-          total_ventas: { $sum: 1 },
-          ticket_promedio: { $avg: '$price' }
-        }
-      },
-      { $sort: { ingresos_totales: -1 } },
-      { $limit: Number(limite) },
-      {
-        $project: {
-          marca: '$_id',
-          _id: 0,
-          ingresos_totales: { $round: ['$ingresos_totales', 2] },
-          total_ventas: 1,
-          ticket_promedio: { $round: ['$ticket_promedio', 2] }
-        }
-      }
-    ];
-
-    return await col.aggregate(pipeline).toArray();
-  }
-
-  /**
-   * INFORME 4: Comparación de categorías (ingresos, unidades, precio promedio).
-   * @param {number} [limite=12]
-   */
-  async obtenerComparacionCategorias(limite = 12) {
-    const col = getEventosCollection();
-    const pipeline = [
-      { $match: { event_type: 'purchase', category_code: { $ne: '' } } },
-      {
-        $group: {
-          _id: '$category_code',
-          total_unidades: { $sum: 1 },
-          ingresos_totales: { $sum: '$price' },
-          precio_promedio: { $avg: '$price' }
-        }
-      },
-      { $sort: { ingresos_totales: -1 } },
-      { $limit: Number(limite) },
-      {
-        $project: {
-          categoria: '$_id',
-          _id: 0,
-          total_unidades: 1,
-          ingresos_totales: { $round: ['$ingresos_totales', 2] },
-          precio_promedio: { $round: ['$precio_promedio', 2] }
-        }
-      }
-    ];
-
-    return await col.aggregate(pipeline).toArray();
-  }
-
-  /**
-   * INFORME 5: Clientes VIP (Top compradores por gasto acumulado y frecuencia).
-   * @param {number} [limite=20]
-   */
-  async obtenerClientesTop(limite = 20) {
-    const col = getEventosCollection();
-    const pipeline = [
-      { $match: { event_type: 'purchase' } },
-      {
-        $group: {
-          _id: '$user_id',
-          gasto_total: { $sum: '$price' },
-          total_compras: { $sum: 1 },
-          ticket_promedio: { $avg: '$price' },
-          primera_compra: { $min: '$event_time' },
-          ultima_compra: { $max: '$event_time' }
-        }
-      },
-      { $sort: { gasto_total: -1 } },
-      { $limit: Number(limite) },
-      {
-        $project: {
-          user_id: '$_id',
-          _id: 0,
-          gasto_total: { $round: ['$gasto_total', 2] },
-          total_compras: 1,
-          ticket_promedio: { $round: ['$ticket_promedio', 2] },
-          primera_compra: 1,
-          ultima_compra: 1
-        }
-      }
-    ];
-
-    return await col.aggregate(pipeline).toArray();
-  }
-
-  /**
-   * INFORME 6: Embudo de conversión y tasa de abandono de carrito (views vs cart vs purchase).
-   */
-  async obtenerEmbudoConversion() {
-    const col = getEventosCollection();
-    const pipeline = [
-      {
-        $group: {
-          _id: '$event_type',
-          total_eventos: { $sum: 1 }
-        }
-      }
-    ];
-
-    const resultados = await col.aggregate(pipeline).toArray();
-    const mapa = {};
-    for (const r of resultados) {
-      mapa[r._id] = r.total_eventos;
-    }
-
-    const views = mapa['view'] || 0;
-    const cart = mapa['cart'] || 0;
-    const purchase = mapa['purchase'] || 0;
-    const removeFromCart = mapa['remove_from_cart'] || 0;
-
-    const tasaConversionTotal = views > 0 ? Number(((purchase / views) * 100).toFixed(2)) : 0;
-    const tasaConversionCarrito = cart > 0 ? Number(((purchase / cart) * 100).toFixed(2)) : 0;
-    const tasaAbandonoCarrito = cart > 0 ? Number((((cart - purchase) / cart) * 100).toFixed(2)) : 0;
-
-    return {
-      etapas: [
-        { etapa: 'Vistas de Producto (view)', cantidad: views, porcentaje_relativo: 100 },
-        { etapa: 'Añadidos al Carrito (cart)', cantidad: cart, porcentaje_relativo: views > 0 ? Number(((cart / views) * 100).toFixed(2)) : 0 },
-        { etapa: 'Compras Efectivas (purchase)', cantidad: purchase, porcentaje_relativo: views > 0 ? Number(((purchase / views) * 100).toFixed(2)) : 0 },
-        { etapa: 'Eliminados de Carrito (remove)', cantidad: removeFromCart, porcentaje_relativo: cart > 0 ? Number(((removeFromCart / cart) * 100).toFixed(2)) : 0 }
-      ],
-      metricas: {
-        tasa_conversion_global_pct: tasaConversionTotal,
-        tasa_conversion_carrito_pct: tasaConversionCarrito,
-        tasa_abandono_carrito_pct: tasaAbandonoCarrito
-      }
-    };
-  }
-
-  /**
-   * INFORME 7: Comportamiento por franjas horarias y días de la semana (Mapa de Calor).
-   */
-  async obtenerHorariosDemanda() {
-    const col = getEventosCollection();
-    const pipeline = [
-      { $match: { event_type: 'purchase' } },
-      {
-        $group: {
-          _id: {
-            dia_semana: { $isoDayOfWeek: '$event_time' }, // 1 (Lunes) a 7 (Domingo)
-            hora: { $hour: '$event_time' }                // 0 a 23
-          },
-          transacciones: { $sum: 1 },
-          ingresos: { $sum: '$price' }
-        }
-      },
-      {
-        $sort: {
-          '_id.dia_semana': 1,
-          '_id.hora': 1
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          dia_semana: '$_id.dia_semana',
-          hora: '$_id.hora',
-          transacciones: 1,
-          ingresos: { $round: ['$ingresos', 2] }
-        }
-      }
-    ];
-
-    return await col.aggregate(pipeline).toArray();
-  }
-
-  /**
-   * INFORME 8: Detección de productos con disminución de demanda entre periodos.
-   * Compara ventas en dos ventanas de tiempo consecutivas para identificar caídas drásticas.
-   * @param {Date} [fechaCorte]
-   * @param {number} [limite=15]
-   */
-  async obtenerProductosDisminucionDemanda(fechaCorte = new Date('2019-10-16T00:00:00.000Z'), limite = 15) {
-    const col = getEventosCollection();
-    const corte = new Date(fechaCorte);
-
-    const pipeline = [
-      { $match: { event_type: 'purchase' } },
-      {
-        $group: {
-          _id: '$product_id',
-          categoria: { $first: '$category_code' },
-          marca: { $first: '$brand' },
-          precio_promedio: { $avg: '$price' },
-          ventas_periodo_1: {
-            $sum: { $cond: [{ $lt: ['$event_time', corte] }, 1, 0] }
-          },
-          ventas_periodo_2: {
-            $sum: { $cond: [{ $gte: ['$event_time', corte] }, 1, 0] }
-          }
-        }
-      },
-      {
-        $project: {
-          product_id: '$_id',
-          _id: 0,
-          categoria: 1,
-          marca: 1,
-          precio_promedio: { $round: ['$precio_promedio', 2] },
-          ventas_periodo_1: 1,
-          ventas_periodo_2: 1,
-          caida_unidades: { $subtract: ['$ventas_periodo_1', '$ventas_periodo_2'] },
-          porcentaje_caida: {
-            $cond: [
-              { $gt: ['$ventas_periodo_1', 0] },
+    const [result = { serie_diaria: [], resumen: [] }] = await getEventosCollection()
+      .aggregate([
+        { $match: match },
+        {
+          $facet: {
+            serie_diaria: [
               {
-                $round: [
-                  {
-                    $multiply: [
-                      {
-                        $divide: [
-                          { $subtract: ['$ventas_periodo_1', '$ventas_periodo_2'] },
-                          '$ventas_periodo_1'
-                        ]
-                      },
-                      100
-                    ]
-                  },
-                  2
-                ]
+                $group: {
+                  _id: { $dateToString: { format: '%Y-%m-%d', date: '$pickup_datetime' } },
+                  viajes: { $sum: 1 },
+                  ingresos: { $sum: '$total_amount' },
+                  distancia_promedio: { $avg: '$trip_distance' }
+                }
               },
-              0
+              { $sort: { _id: 1 } },
+              {
+                $project: {
+                  _id: 0,
+                  fecha: '$_id',
+                  viajes: 1,
+                  ingresos: { $round: ['$ingresos', 2] },
+                  distancia_promedio: { $round: ['$distancia_promedio', 2] }
+                }
+              }
+            ],
+            resumen: [
+              {
+                $group: {
+                  _id: null,
+                  total_viajes: { $sum: 1 },
+                  ingresos_totales: { $sum: '$total_amount' },
+                  tarifa_promedio: { $avg: '$total_amount' },
+                  distancia_promedio: { $avg: '$trip_distance' }
+                }
+              },
+              {
+                $project: {
+                  _id: 0,
+                  total_viajes: 1,
+                  ingresos_totales: { $round: ['$ingresos_totales', 2] },
+                  tarifa_promedio: { $round: ['$tarifa_promedio', 2] },
+                  distancia_promedio: { $round: ['$distancia_promedio', 2] }
+                }
+              }
             ]
           }
         }
-      },
-      // Solo productos con caídas reales y volumen representativo en periodo 1
-      {
-        $match: {
-          ventas_periodo_1: { $gte: 15 },
-          caida_unidades: { $gt: 5 }
-        }
-      },
-      { $sort: { caida_unidades: -1 } },
-      { $limit: Number(limite) }
-    ];
-
-    return await col.aggregate(pipeline).toArray();
-  }
-
-  /**
-   * INFORME 9: Ejecución de consultas analíticas en Lenguaje Natural traducidas a Pipeline.
-   * @param {Array<Object>} pipeline Pipeline validado de etapas de lectura.
-   * @returns {Promise<{ tiempo_ms: number, resultados: Array<Object> }>}
-   */
-  async ejecutarPipelineSeguro(pipeline) {
-    const col = getEventosCollection();
-    const tInicio = Date.now();
-    const resultados = await col.aggregate(pipeline, { maxTimeMS: 180000, allowDiskUse: true }).toArray();
-    const tiempo_ms = Date.now() - tInicio;
+      ], { allowDiskUse: true, maxTimeMS: 180000 })
+      .toArray();
 
     return {
-      tiempo_ms,
-      total_resultados: resultados.length,
-      resultados
+      kpis: result.resumen[0] || {
+        total_viajes: 0,
+        ingresos_totales: 0,
+        tarifa_promedio: 0,
+        distancia_promedio: 0
+      },
+      serie_diaria: result.serie_diaria
     };
   }
 
-  /**
-   * INFORME 10 (Tiempo Real 3): Monitor de últimas transacciones en vivo.
-   * @param {number} [limite=25]
-   */
-  async obtenerEventosRecientes(limite = 25) {
-    const col = getEventosCollection();
-    const docs = await col
-      .find({ event_type: 'purchase' })
-      .sort({ event_time: -1 })
-      .limit(Number(limite))
-      .project({
-        _id: 1,
-        event_time: 1,
-        product_id: 1,
-        category_code: 1,
-        brand: 1,
-        price: 1,
-        user_id: 1,
-        user_session: 1
-      })
-      .toArray();
+  async obtenerZonasRecogida(limite = 10) {
+    return (await obtenerReporteMaterializado('reporte2')).slice(0, Number(limite));
+  }
 
-    return docs;
+  async obtenerRutasPopulares(limite = 10) {
+    return (await obtenerReporteMaterializado('reporte3')).slice(0, Number(limite));
+  }
+
+  async obtenerIngresosPorDistrito(limite = 10) {
+    return (await obtenerReporteMaterializado('reporte4')).slice(0, Number(limite));
+  }
+
+  async obtenerFormasPago() {
+    return obtenerReporteMaterializado('reporte5');
+  }
+
+  async obtenerDistribucionDistancias() {
+    return obtenerReporteMaterializado('reporte6');
+  }
+
+  async obtenerDemandaHoraria() {
+    return obtenerReporteMaterializado('reporte7');
+  }
+
+  async obtenerPropinasPorZona(limite = 10) {
+    return (await obtenerReporteMaterializado('reporte8')).slice(0, Number(limite));
+  }
+
+  async ejecutarPipelineSeguro(pipeline) {
+    const started = Date.now();
+    const resultados = await getEventosCollection()
+      .aggregate([{ $match: periodoDataset() }, ...pipeline], { maxTimeMS: 180000, allowDiskUse: true })
+      .toArray();
+    return { tiempo_ms: Date.now() - started, total_resultados: resultados.length, resultados };
+  }
+
+  async obtenerViajesRecientes(limite = 25) {
+    return getEventosCollection().aggregate([
+      { $match: periodoDataset() },
+      { $match: { pickup_datetime: { $type: 'date' } } },
+      { $sort: { pickup_datetime: -1 } },
+      { $limit: Number(limite) },
+      { $lookup: { from: ZONE_COLLECTION, localField: 'pickup_location_id', foreignField: '_id', as: 'origen' } },
+      { $lookup: { from: ZONE_COLLECTION, localField: 'dropoff_location_id', foreignField: '_id', as: 'destino' } },
+      { $unwind: { path: '$origen', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$destino', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          pickup_datetime: 1,
+          dropoff_datetime: 1,
+          pickup_location_id: 1,
+          dropoff_location_id: 1,
+          origen: { $ifNull: ['$origen.zone', 'Zona desconocida'] },
+          destino: { $ifNull: ['$destino.zone', 'Zona desconocida'] },
+          passenger_count: 1,
+          trip_distance: 1,
+          total_amount: 1,
+          tip_amount: 1,
+          payment_type: 1
+        }
+      }
+    ]).toArray();
+  }
+
+  async buscarZonas(consulta, limite = 20) {
+    const escaped = consulta.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return getDB().collection(ZONE_COLLECTION).find({
+      $or: [
+        { zone: { $regex: escaped, $options: 'i' } },
+        { borough: { $regex: escaped, $options: 'i' } },
+        { service_zone: { $regex: escaped, $options: 'i' } }
+      ]
+    }).sort({ borough: 1, zone: 1 }).limit(Number(limite)).toArray();
   }
 }
 

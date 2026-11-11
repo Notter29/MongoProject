@@ -1,94 +1,63 @@
-/**
- * @file realTime.socket.js
- * @description Módulo WebSocket con Socket.io y MongoDB Change Streams.
- * 
- * REGLA ESTRICTA DE EVALUACIÓN (Ítem 4.6 del PDF):
- * "Al menos tres (3) de los diez informes deberá implementar actualización de información
- *  en tiempo real... mediante Change Streams sobre replica sets o sharded clusters."
- */
-
 const { getEventosCollection } = require('../config/db');
 
 let changeStream = null;
 
-/**
- * Inicializa Socket.io y el Change Stream sobre la colección 'eventos'.
- * @param {import('socket.io').Server} io
- */
 function inicializarSockets(io) {
   io.on('connection', (socket) => {
-    console.log(`[SOCKET] Cliente conectado: ${socket.id} (Total conectados: ${io.engine.clientsCount})`);
+    console.log(`[SOCKET] Cliente conectado: ${socket.id}`);
+    socket.emit('database_status', { live: Boolean(changeStream) });
+  });
 
-    socket.on('disconnect', () => {
-      console.log(`[SOCKET] Cliente desconectado: ${socket.id}`);
+  const collection = getEventosCollection();
+  const pipeline = [
+    {
+      $match: {
+        operationType: 'insert',
+        'fullDocument.demo': true,
+        'fullDocument.source_file': { $exists: false }
+      }
+    }
+  ];
+
+  changeStream = collection.watch(pipeline, { fullDocument: 'default' });
+  changeStream.on('change', ({ fullDocument }) => {
+    if (!fullDocument) return;
+
+    const viaje = {
+      _id: fullDocument._id,
+      pickup_datetime: fullDocument.pickup_datetime,
+      dropoff_datetime: fullDocument.dropoff_datetime,
+      pickup_location_id: fullDocument.pickup_location_id,
+      dropoff_location_id: fullDocument.dropoff_location_id,
+      passenger_count: fullDocument.passenger_count,
+      trip_distance: fullDocument.trip_distance,
+      total_amount: fullDocument.total_amount,
+      tip_amount: fullDocument.tip_amount,
+      payment_type: fullDocument.payment_type
+    };
+
+    io.emit('nuevo_viaje', viaje);
+    io.emit('incremento_viaje', {
+      total_amount: viaje.total_amount || 0,
+      trip_distance: viaje.trip_distance || 0,
+      pickup_location_id: viaje.pickup_location_id
     });
   });
 
-  try {
-    const col = getEventosCollection();
-    console.log('[CHANGE STREAM] Iniciando escucha de inserciones en la colección eventos...');
+  changeStream.on('error', (error) => {
+    changeStream = null;
+    console.error(`[CHANGE STREAM ERROR] ${error.message}`);
+    io.emit('database_status', { live: false });
+  });
 
-    // Observar solo operaciones de inserción
-    const pipeline = [
-      {
-        $match: {
-          operationType: 'insert'
-        }
-      }
-    ];
-
-    changeStream = col.watch(pipeline, { fullDocument: 'updateLookup' });
-
-    changeStream.on('change', (change) => {
-      const doc = change.fullDocument;
-      if (!doc) return;
-
-      // Solo emitimos si es un evento de compra relevante
-      if (doc.event_type === 'purchase') {
-        const transaccion = {
-          _id: doc._id,
-          event_time: doc.event_time,
-          product_id: doc.product_id,
-          category_code: doc.category_code,
-          brand: doc.brand,
-          price: doc.price,
-          user_id: doc.user_id,
-          user_session: doc.user_session
-        };
-
-        // 1. Emisión para Informe 10 (Monitor de transacciones recientes)
-        io.emit('nueva_transaccion', transaccion);
-
-        // 2. Emisión para Informes 1 y 2 (Actualización de KPIs e incremento)
-        io.emit('incremento_venta', {
-          monto: doc.price,
-          product_id: doc.product_id,
-          brand: doc.brand,
-          categoria: doc.category_code,
-          timestamp: doc.event_time
-        });
-      }
-    });
-
-    changeStream.on('error', (error) => {
-      console.error(`[CHANGE STREAM ERROR] Error en el flujo de cambios: ${error.message}`);
-    });
-
-    console.log('[CHANGE STREAM] Conectado exitosamente al Oplog de MongoDB.');
-  } catch (error) {
-    console.error(`[CHANGE STREAM ERROR] No se pudo inicializar Change Streams: ${error.message}`);
-  }
+  console.log('[CHANGE STREAM] Escuchando viajes de demostración en vivo.');
 }
 
 function detenerChangeStream() {
   if (changeStream) {
     changeStream.close();
     changeStream = null;
-    console.log('[CHANGE STREAM] Flujo de cambios detenido.');
   }
 }
 
-module.exports = {
-  inicializarSockets,
-  detenerChangeStream
-};
+module.exports = { inicializarSockets, detenerChangeStream };

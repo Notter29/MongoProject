@@ -1,369 +1,420 @@
-/**
- * @file app.js
- * @description Controlador principal del Frontend Dashboard.
- * Coordina la carga de datos de la API, las pestañas de navegación y los eventos en tiempo real.
- */
-
-// Estado global en memoria para reactividad
 const state = {
   dbStats: null,
-  kpis: {
-    ingresos: 0,
-    compras: 0,
-    ticketPromedio: 0
-  },
-  topProductos: [],
-  transaccionesRecientes: []
+  kpis: { ingresos: 0, viajes: 0, tarifaPromedio: 0 },
+  zonasRecogida: [],
+  viajesRecientes: [],
+  loadedTabs: new Set(),
+  live: false
+};
+
+const METODOS_PAGO = {
+  1: 'Tarjeta de crédito',
+  2: 'Efectivo',
+  3: 'Sin cargo',
+  4: 'Disputa',
+  5: 'Desconocido',
+  6: 'Viaje anulado'
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('[APP] Inicializando Dashboard de Comercio Electrónico...');
-
-  // 1. Configurar navegación de pestañas
   configurarTabs();
-
-  // 2. Inicializar módulo NLP (Informe 9)
+  configurarSidebar();
   inicializarModuloNLP();
-
-  // 3. Inicializar WebSocket con callbacks de reactividad
   inicializarWebSocket({
-    onNuevaTransaccion: handleNuevaTransaccion,
-    onIncrementoVenta: handleIncrementoVenta
+    onNuevoViaje: manejarNuevoViaje,
+    onIncrementoViaje: manejarIncrementoViaje,
+    onEstadoBD: (live) => actualizarEstadoSocket(live)
   });
-
-  // 4. Carga inicial de datos desde la API
   await cargarEstadisticasDB();
-  await cargarInforme1Ventas();
-  await cargarInforme2TopProductos();
-  await cargarInforme10EventosRecientes();
-  await cargarInforme3Marcas();
-  await cargarInforme4Categorias();
-  await cargarInforme5Clientes();
-  await cargarInforme6Embudo();
-  await cargarInforme7Horarios();
-  await cargarInforme8Disminucion();
-
-  // Actualizar estadísticas de base de datos cada 30 segundos
+  await cargarPestana('tab-tiempo-real');
   setInterval(cargarEstadisticasDB, 30000);
 });
 
 function configurarTabs() {
-  const tabButtons = document.querySelectorAll('.tab-btn');
-  const tabPanes = document.querySelectorAll('.tab-pane');
-
-  tabButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      tabButtons.forEach((b) => b.classList.remove('active'));
-      tabPanes.forEach((p) => p.classList.remove('active'));
-
-      btn.classList.add('active');
-      const targetId = btn.getAttribute('data-tab');
-      const targetPane = document.getElementById(targetId);
-      if (targetPane) targetPane.classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach((button) => {
+    button.addEventListener('click', async () => {
+      document.querySelectorAll('.tab-btn').forEach((item) => item.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach((item) => item.classList.remove('active'));
+      button.classList.add('active');
+      const tabId = button.getAttribute('data-tab');
+      document.getElementById(tabId)?.classList.add('active');
+      document.getElementById('page-title').textContent = button.dataset.title;
+      if (window.matchMedia('(max-width: 900px)').matches) {
+        document.body.classList.remove('sidebar-open');
+        document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'false');
+      }
+      await cargarPestana(tabId);
     });
   });
 }
 
-// --------------------------------------------------------------------------
-// CARGA DE DATOS DESDE LA API
-// --------------------------------------------------------------------------
+function configurarSidebar() {
+  const toggle = document.getElementById('sidebar-toggle');
+  const overlay = document.getElementById('sidebar-overlay');
+  const mobile = window.matchMedia('(max-width: 900px)');
+  const setExpanded = (expanded) => {
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.setAttribute('aria-label', expanded ? 'Cerrar menú de navegación' : 'Abrir menú de navegación');
+  };
+
+  setExpanded(!mobile.matches);
+  toggle.addEventListener('click', () => {
+    if (mobile.matches) {
+      document.body.classList.toggle('sidebar-open');
+      setExpanded(document.body.classList.contains('sidebar-open'));
+      return;
+    }
+
+    document.body.classList.toggle('sidebar-collapsed');
+    setExpanded(!document.body.classList.contains('sidebar-collapsed'));
+  });
+  overlay.addEventListener('click', () => {
+    document.body.classList.remove('sidebar-open');
+    setExpanded(false);
+  });
+  mobile.addEventListener('change', (event) => {
+    document.body.classList.remove('sidebar-open', 'sidebar-collapsed');
+    setExpanded(!event.matches);
+  });
+}
+
+async function cargarPestana(tabId) {
+  if (state.loadedTabs.has(tabId)) return;
+  const reportes = [];
+
+  if (tabId === 'tab-tiempo-real') {
+    reportes.push(
+      {
+        elemento: 'chart-viajes-periodo',
+        nombre: 'Informe 1',
+        solicitud: api.getInforme1Viajes(),
+        renderizar: actualizarResumen
+      },
+      {
+        elemento: 'chart-top-zonas',
+        nombre: 'Informe 2',
+        solicitud: api.getInforme2Zonas(),
+        renderizar: (zonas) => {
+          state.zonasRecogida = zonas;
+          renderizarZonas();
+        }
+      },
+      {
+        elemento: 'tabla-viajes-body',
+        nombre: 'Informe 10',
+        solicitud: api.getInforme10ViajesRecientes(),
+        renderizar: (viajes) => {
+          state.viajesRecientes = viajes;
+          renderizarViajes();
+        }
+      }
+    );
+  } else if (tabId === 'tab-comercial') {
+    reportes.push(
+      {
+        elemento: 'chart-rutas-populares',
+        nombre: 'Informe 3',
+        solicitud: api.getInforme3Rutas(),
+        renderizar: renderizarRutas
+      },
+      {
+        elemento: 'chart-ingresos-distrito',
+        nombre: 'Informe 4',
+        solicitud: api.getInforme4Distritos(),
+        renderizar: renderizarDistritos
+      },
+      {
+        elemento: 'tabla-pagos-body',
+        nombre: 'Informe 5',
+        solicitud: api.getInforme5Pagos(),
+        renderizar: renderizarPagos
+      }
+    );
+  } else if (tabId === 'tab-distancias-horarios') {
+    reportes.push(
+      {
+        elemento: 'chart-distancias',
+        nombre: 'Informe 6',
+        solicitud: api.getInforme6Distancias(),
+        renderizar: renderizarDistancias
+      },
+      {
+        elemento: 'heatmap-grid',
+        nombre: 'Informe 7',
+        solicitud: api.getInforme7Horarios(),
+        renderizar: renderizarDemanda
+      },
+      {
+        elemento: 'chart-propinas',
+        nombre: 'Informe 8',
+        solicitud: api.getInforme8Propinas(),
+        renderizar: renderizarPropinas
+      }
+    );
+  } else {
+    return;
+  }
+
+  const resultados = await Promise.allSettled(reportes.map((reporte) => reporte.solicitud));
+  let todosRenderizados = true;
+  resultados.forEach((resultado, indice) => {
+    const reporte = reportes[indice];
+    try {
+      if (resultado.status === 'rejected') {
+        throw resultado.reason;
+      }
+
+      reporte.renderizar(resultado.value);
+      limpiarErrorInforme(reporte.elemento);
+    } catch (error) {
+      todosRenderizados = false;
+      const message = error?.message || String(error);
+      console.error(`[DASHBOARD] ${reporte.nombre}: ${message}`);
+      mostrarErrorInforme(reporte.elemento, reporte.nombre, message);
+    }
+  });
+
+  if (todosRenderizados) {
+    state.loadedTabs.add(tabId);
+  }
+}
 
 async function cargarEstadisticasDB() {
   try {
     const stats = await api.getStats();
     state.dbStats = stats;
+    document.getElementById('stat-datasize').innerText = `${stats.dataSizeGB.toFixed(2)} GiB`;
+    document.getElementById('stat-storagesize').innerText = `${stats.storageSizeGB.toFixed(2)} GiB`;
+    document.getElementById('stat-totaldocs').innerText = stats.totalDocumentos.toLocaleString();
+    document.getElementById('stat-dbname').innerText = stats.dbName;
 
-    const elDataSize = document.getElementById('stat-datasize');
-    const elStorageSize = document.getElementById('stat-storagesize');
-    const elTotalDocs = document.getElementById('stat-totaldocs');
-    const elDbName = document.getElementById('stat-dbname');
-
-    if (elDataSize) elDataSize.innerText = `${stats.dataSizeGB.toFixed(2)} GB`;
-    if (elStorageSize) elStorageSize.innerText = `${stats.storageSizeGB.toFixed(2)} GB`;
-    if (elTotalDocs) elTotalDocs.innerText = stats.totalDocumentos.toLocaleString();
-    if (elDbName) elDbName.innerText = stats.dbName;
-
-    // Verificar si ya superamos la meta de 20 GB
-    const badgeMeta = document.getElementById('badge-meta-20gb');
-    if (badgeMeta) {
-      if (stats.dataSizeGB >= 20.0) {
-        badgeMeta.innerText = 'Meta Alcanzada: ≥ 20 GB';
-        badgeMeta.className = 'badge badge-live';
-      } else {
-        badgeMeta.innerText = `Cargando volumen (${stats.dataSizeGB.toFixed(1)} / 20.0 GB)`;
-        badgeMeta.className = 'badge badge-db';
-      }
+    const badge = document.getElementById('badge-meta-20gb');
+    if (stats.dataSizeGB >= 20) {
+      badge.innerText = 'Meta alcanzada: ≥ 20 GiB';
+      badge.className = 'badge badge-live';
+    } else {
+      badge.innerText = `${stats.dataSizeGB.toFixed(2)} / 20 GiB`;
+      badge.className = 'badge badge-db';
     }
-  } catch (err) {
-    console.error('Error cargando stats de DB:', err);
+  } catch (error) {
+    console.error(`[DASHBOARD] No se pudieron cargar estadísticas: ${error.message}`);
   }
 }
 
-async function cargarInforme1Ventas() {
-  try {
-    const data = await api.getInforme1Ventas();
-    state.kpis.ingresos = data.kpis.ingresos_totales;
-    state.kpis.compras = data.kpis.compras_totales;
-    state.kpis.ticketPromedio = data.kpis.ticket_promedio_general;
-
-    actualizarTarjetasKPI();
-
-    // Renderizar gráfico de ventas diarias
-    const ctx = document.getElementById('chart-ventas-periodo');
-    if (ctx && data.serie_diaria.length > 0) {
-      const labels = data.serie_diaria.map((d) => d.fecha);
-      const ingresos = data.serie_diaria.map((d) => d.ingresos);
-      const compras = data.serie_diaria.map((d) => d.total_compras);
-      renderChartVentas(ctx, labels, ingresos, compras);
-    }
-  } catch (err) {
-    console.error('Error cargando Informe 1:', err);
-  }
-}
-
-async function cargarInforme2TopProductos() {
-  try {
-    const productos = await api.getInforme2TopProductos(10);
-    state.topProductos = productos;
-
-    const ctx = document.getElementById('chart-top-productos');
-    if (ctx && productos.length > 0) {
-      const labels = productos.map((p) => `${p.marca.toUpperCase()} (#${p.product_id})`);
-      const unidades = productos.map((p) => p.unidades_vendidas);
-      const ingresos = productos.map((p) => p.ingresos_generados);
-      renderChartTopProductos(ctx, labels, unidades, ingresos);
-    }
-  } catch (err) {
-    console.error('Error cargando Informe 2:', err);
-  }
-}
-
-async function cargarInforme10EventosRecientes() {
-  try {
-    const eventos = await api.getInforme10EventosRecientes(15);
-    state.transaccionesRecientes = eventos;
-    renderizarTablaTransacciones();
-  } catch (err) {
-    console.error('Error cargando Informe 10:', err);
-  }
-}
-
-async function cargarInforme3Marcas() {
-  try {
-    const marcas = await api.getInforme3Marcas(10);
-    const ctx = document.getElementById('chart-marcas-rentables');
-    if (ctx && marcas.length > 0) {
-      const labels = marcas.map((m) => m.marca.toUpperCase());
-      const ingresos = marcas.map((m) => m.ingresos_totales);
-      renderChartMarcas(ctx, labels, ingresos);
-    }
-
-    const tbody = document.getElementById('tabla-marcas-body');
-    if (tbody) {
-      tbody.innerHTML = marcas
-        .map(
-          (m, idx) => `
-        <tr>
-          <td><strong>#${idx + 1}</strong> ${m.marca.toUpperCase()}</td>
-          <td style="color: #10b981; font-weight: 600;">$${m.ingresos_totales.toLocaleString()}</td>
-          <td>${m.total_ventas.toLocaleString()}</td>
-          <td>$${m.ticket_promedio.toFixed(2)}</td>
-        </tr>
-      `
-        )
-        .join('');
-    }
-  } catch (err) {
-    console.error('Error cargando Informe 3:', err);
-  }
-}
-
-async function cargarInforme4Categorias() {
-  try {
-    const categorias = await api.getInforme4Categorias(8);
-    const ctx = document.getElementById('chart-categorias');
-    if (ctx && categorias.length > 0) {
-      const labels = categorias.map((c) => c.categoria);
-      const ingresos = categorias.map((c) => c.ingresos_totales);
-      renderChartCategorias(ctx, labels, ingresos);
-    }
-  } catch (err) {
-    console.error('Error cargando Informe 4:', err);
-  }
-}
-
-async function cargarInforme5Clientes() {
-  try {
-    const clientes = await api.getInforme5Clientes(10);
-    const tbody = document.getElementById('tabla-clientes-body');
-    if (tbody) {
-      tbody.innerHTML = clientes
-        .map(
-          (c, idx) => `
-        <tr>
-          <td><span class="badge ${idx < 3 ? 'badge-live' : 'badge-db'}">VIP #${idx + 1}</span> ${c.user_id}</td>
-          <td style="color: #06b6d4; font-weight: 700;">$${c.gasto_total.toLocaleString()}</td>
-          <td><strong>${c.total_compras}</strong> compras</td>
-          <td>$${c.ticket_promedio.toFixed(2)}</td>
-          <td>${new Date(c.ultima_compra).toLocaleDateString()}</td>
-        </tr>
-      `
-        )
-        .join('');
-    }
-  } catch (err) {
-    console.error('Error cargando Informe 5:', err);
-  }
-}
-
-async function cargarInforme6Embudo() {
-  try {
-    const data = await api.getInforme6Embudo();
-    const contenedor = document.getElementById('funnel-container');
-    const metricasContenedor = document.getElementById('funnel-metrics');
-
-    if (contenedor && data.etapas) {
-      contenedor.innerHTML = data.etapas
-        .map(
-          (e) => `
-        <div class="funnel-step">
-          <div class="funnel-bar" style="width: ${Math.max(e.porcentaje_relativo, 5)}%;"></div>
-          <div class="funnel-content">
-            <div>
-              <strong>${e.etapa}</strong>
-              <div style="font-size: 0.8rem; color: #9ca3af;">${e.porcentaje_relativo}% relativo</div>
-            </div>
-            <div style="font-size: 1.25rem; font-weight: 800; color: #06b6d4;">
-              ${e.cantidad.toLocaleString()}
-            </div>
-          </div>
-        </div>
-      `
-        )
-        .join('');
-    }
-
-    if (metricasContenedor && data.metricas) {
-      document.getElementById('m-conv-global').innerText = `${data.metricas.tasa_conversion_global_pct}%`;
-      document.getElementById('m-conv-cart').innerText = `${data.metricas.tasa_conversion_carrito_pct}%`;
-      document.getElementById('m-aban-cart').innerText = `${data.metricas.tasa_abandono_carrito_pct}%`;
-    }
-  } catch (err) {
-    console.error('Error cargando Informe 6:', err);
-  }
-}
-
-async function cargarInforme7Horarios() {
-  try {
-    const data = await api.getInforme7Horarios();
-    const contenedor = document.getElementById('heatmap-grid');
-    if (!contenedor) return;
-
-    // Matriz de 7 días x 24 horas
-    const matriz = Array.from({ length: 7 }, () => Array(24).fill(0));
-    let maxTransacciones = 1;
-
-    for (const item of data) {
-      const d = item.dia_semana - 1; // 0 a 6
-      const h = item.hora;           // 0 a 23
-      if (d >= 0 && d < 7 && h >= 0 && h < 24) {
-        matriz[d][h] = item.transacciones;
-        if (item.transacciones > maxTransacciones) {
-          maxTransacciones = item.transacciones;
-        }
-      }
-    }
-
-    const nombresDias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    let html = '<div></div>'; // Esquina vacía
-    for (let h = 0; h < 24; h++) {
-      html += `<div style="text-align: center; font-size: 0.7rem; color: #9ca3af;">${h}h</div>`;
-    }
-
-    for (let d = 0; d < 7; d++) {
-      html += `<div style="font-weight: 600; font-size: 0.8rem; display: flex; align-items: center;">${nombresDias[d]}</div>`;
-      for (let h = 0; h < 24; h++) {
-        const val = matriz[d][h];
-        const intensidad = (val / maxTransacciones) * 0.9 + 0.1;
-        const color = val > 0 ? `rgba(6, 182, 212, ${intensidad.toFixed(2)})` : 'rgba(255,255,255,0.03)';
-        html += `
-          <div class="heatmap-cell" style="background-color: ${color};" title="${nombresDias[d]} ${h}:00 - ${val.toLocaleString()} compras">
-            ${val > 0 ? (val > 999 ? (val / 1000).toFixed(1) + 'k' : val) : ''}
-          </div>
-        `;
-      }
-    }
-
-    contenedor.innerHTML = html;
-  } catch (err) {
-    console.error('Error cargando Informe 7:', err);
-  }
-}
-
-async function cargarInforme8Disminucion() {
-  try {
-    const productos = await api.getInforme8Disminucion(null, 8);
-    const ctx = document.getElementById('chart-disminucion-demanda');
-    if (ctx && productos.length > 0) {
-      const labels = productos.map((p) => `${p.marca.toUpperCase()} (#${p.product_id})`);
-      const p1 = productos.map((p) => p.ventas_periodo_1);
-      const p2 = productos.map((p) => p.ventas_periodo_2);
-      renderChartDisminucion(ctx, labels, p1, p2);
-    }
-  } catch (err) {
-    console.error('Error cargando Informe 8:', err);
-  }
-}
-
-// --------------------------------------------------------------------------
-// ACTUALIZACIONES EN TIEMPO REAL (SOCKET.IO & CHANGE STREAMS)
-// --------------------------------------------------------------------------
-
-function handleNuevaTransaccion(t) {
-  // Agregar al inicio del arreglo del Informe 10
-  state.transaccionesRecientes.unshift(t);
-  if (state.transaccionesRecientes.length > 25) {
-    state.transaccionesRecientes.pop();
-  }
-  renderizarTablaTransacciones(true);
-}
-
-function handleIncrementoVenta(datos) {
-  // Bumps en los KPIs del Informe 1
-  state.kpis.ingresos += datos.monto;
-  state.kpis.compras += 1;
-  state.kpis.ticketPromedio = state.kpis.ingresos / state.kpis.compras;
+function actualizarResumen(data) {
+  state.kpis.ingresos = data.kpis.ingresos_totales;
+  state.kpis.viajes = data.kpis.total_viajes;
+  state.kpis.tarifaPromedio = data.kpis.tarifa_promedio;
   actualizarTarjetasKPI();
+
+  if (data.serie_diaria.length) {
+    renderChartVentas(
+      document.getElementById('chart-viajes-periodo'),
+      data.serie_diaria.map((item) => item.fecha),
+      data.serie_diaria.map((item) => item.ingresos),
+      data.serie_diaria.map((item) => item.viajes)
+    );
+  }
+}
+
+function renderizarZonas(zonas = state.zonasRecogida) {
+  if (!zonas.length) return;
+  renderChartTopZonas(
+    document.getElementById('chart-top-zonas'),
+    zonas.map((item) => `${item.zona} (${item.borough})`),
+    zonas.map((item) => item.viajes)
+  );
+}
+
+function renderizarRutas(rutas) {
+  const tbody = document.getElementById('tabla-rutas-body');
+  const rows = rutas.map((item) => ({
+    ruta: `${item.origen} → ${item.destino}`,
+    ingresos: money(item.ingresos),
+    viajes: item.viajes.toLocaleString(),
+    distancia: `${item.distancia_promedio.toFixed(2)} mi`
+  }));
+  llenarTabla(tbody, rows, 'ruta', ['ruta', 'ingresos', 'viajes', 'distancia']);
+  if (rutas.length) {
+    renderChartRutas(
+      document.getElementById('chart-rutas-populares'),
+      rutas.slice(0, 10).map((item) => `${item.origen} → ${item.destino}`),
+      rutas.slice(0, 10).map((item) => item.viajes)
+    );
+  }
+}
+
+function renderizarDistritos(distritos) {
+  if (distritos.length) {
+    renderChartIngresosDistritos(
+      document.getElementById('chart-ingresos-distrito'),
+      distritos.map((item) => item.borough),
+      distritos.map((item) => item.ingresos)
+    );
+  }
+}
+
+function renderizarPagos(pagos) {
+  const tbody = document.getElementById('tabla-pagos-body');
+  const rows = pagos.map((item) => ({
+    metodo: METODOS_PAGO[item.payment_type] || `Tipo ${item.payment_type ?? 'N/D'}`,
+    viajes: item.viajes.toLocaleString(),
+    ingresos: money(item.ingresos),
+    tarifa: money(item.tarifa_promedio)
+  }));
+  llenarTabla(tbody, rows, 'metodo', ['metodo', 'viajes', 'ingresos', 'tarifa']);
+}
+
+function renderizarDistancias(distancias) {
+  if (!distancias.length) return;
+  const labels = distancias.map((item, index) => {
+    const start = item.distancia_min_millas;
+    const next = distancias[index + 1]?.distancia_min_millas;
+    return typeof start === 'number' && next ? `${start}-${next} mi` : `${start}+ mi`;
+  });
+  renderChartDistancias(
+    document.getElementById('chart-distancias'),
+    labels,
+    distancias.map((item) => item.viajes)
+  );
+}
+
+function renderizarDemanda(data) {
+  const grid = document.getElementById('heatmap-grid');
+  const matrix = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const maxTrips = Math.max(1, ...data.map((item) => item.viajes));
+  const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  for (const item of data) matrix[item.dia_semana - 1][item.hora] = item.viajes;
+
+  let html = '<div></div>';
+  for (let hour = 0; hour < 24; hour++) html += `<div style="text-align:center;font-size:.7rem">${hour}h</div>`;
+  for (let day = 0; day < 7; day++) {
+    html += `<div style="font-weight:600;display:flex;align-items:center">${days[day]}</div>`;
+    for (let hour = 0; hour < 24; hour++) {
+      const trips = matrix[day][hour];
+      const alpha = trips ? (0.1 + (trips / maxTrips) * 0.9).toFixed(2) : '0.03';
+      html += `<div class="heatmap-cell" style="background:rgba(242,183,5,${alpha})" title="${days[day]} ${hour}:00 · ${trips.toLocaleString()} viajes">${trips ? compact(trips) : ''}</div>`;
+    }
+  }
+  grid.innerHTML = html;
+}
+
+function renderizarPropinas(data) {
+  if (data.length) {
+    renderChartPropinas(
+      document.getElementById('chart-propinas'),
+      data.map((item) => `${item.zona} (${item.borough})`),
+      data.map((item) => item.porcentaje_propina)
+    );
+  }
+}
+
+function actualizarEstadoSocket(live) {
+  state.live = live;
+  const statusDot = document.getElementById('socket-status-dot');
+  const statusText = document.getElementById('socket-status-text');
+  statusDot?.classList.toggle('online', live);
+  if (statusText) statusText.innerText = live ? 'En vivo' : 'Conexión no disponible';
+}
+
+function manejarNuevoViaje(viaje) {
+  state.viajesRecientes.unshift(viaje);
+  state.viajesRecientes = state.viajesRecientes.slice(0, 25);
+  renderizarViajes(true);
+}
+
+function manejarIncrementoViaje(datos) {
+  state.kpis.ingresos += datos.total_amount;
+  state.kpis.viajes += 1;
+  state.kpis.tarifaPromedio = state.kpis.ingresos / state.kpis.viajes;
+  actualizarTarjetasKPI();
+
+  const zone = state.zonasRecogida.find((item) => item.location_id === datos.pickup_location_id);
+  if (zone) zone.viajes += 1;
+  else state.zonasRecogida.push({
+    location_id: datos.pickup_location_id,
+    zona: `Zona #${datos.pickup_location_id}`,
+    borough: 'NYC',
+    viajes: 1
+  });
+  state.zonasRecogida.sort((a, b) => b.viajes - a.viajes);
+  state.zonasRecogida = state.zonasRecogida.slice(0, 10);
+  if (state.loadedTabs.has('tab-tiempo-real')) renderizarZonas();
 }
 
 function actualizarTarjetasKPI() {
-  const elIngresos = document.getElementById('kpi-ingresos-totales');
-  const elCompras = document.getElementById('kpi-compras-totales');
-  const elTicket = document.getElementById('kpi-ticket-promedio');
-
-  if (elIngresos) elIngresos.innerText = `$${state.kpis.ingresos.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  if (elCompras) elCompras.innerText = state.kpis.compras.toLocaleString();
-  if (elTicket) elTicket.innerText = `$${state.kpis.ticketPromedio.toFixed(2)}`;
+  document.getElementById('kpi-ingresos-totales').innerText = money(state.kpis.ingresos);
+  document.getElementById('kpi-viajes-totales').innerText = state.kpis.viajes.toLocaleString();
+  document.getElementById('kpi-tarifa-promedio').innerText = money(state.kpis.tarifaPromedio);
 }
 
-function renderizarTablaTransacciones(highlightFirst = false) {
-  const tbody = document.getElementById('tabla-transacciones-body');
-  if (!tbody) return;
+function renderizarViajes(highlightFirst = false) {
+  const tbody = document.getElementById('tabla-viajes-body');
+  tbody.replaceChildren();
+  for (const [index, viaje] of state.viajesRecientes.entries()) {
+    const row = document.createElement('tr');
+    if (highlightFirst && index === 0) row.classList.add('row-new');
+    const values = [
+      new Date(viaje.pickup_datetime).toLocaleString(),
+      viaje.origen || `Zona #${viaje.pickup_location_id}`,
+      viaje.destino || `Zona #${viaje.dropoff_location_id}`,
+      `${Number(viaje.trip_distance || 0).toFixed(2)} mi`,
+      money(viaje.total_amount),
+      viaje.passenger_count ?? 'N/D'
+    ];
+    for (const value of values) {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.appendChild(cell);
+    }
+    tbody.appendChild(row);
+  }
+}
 
-  tbody.innerHTML = state.transaccionesRecientes
-    .map((t, idx) => {
-      const esNueva = highlightFirst && idx === 0;
-      const fecha = new Date(t.event_time).toLocaleTimeString();
-      return `
-        <tr class="${esNueva ? 'row-new' : ''}">
-          <td><span style="font-family: var(--font-mono); color: #06b6d4;">${fecha}</span></td>
-          <td><strong>${(t.brand || 'GENÉRICO').toUpperCase()}</strong> (#${t.product_id})</td>
-          <td><span style="color: #9ca3af; font-size: 0.85rem;">${t.category_code || 'General'}</span></td>
-          <td style="color: #10b981; font-weight: 700;">$${Number(t.price).toFixed(2)}</td>
-          <td><span style="color: #9ca3af;">${t.user_id}</span></td>
-          <td><span class="badge badge-live">COMPRA EXITOSA</span></td>
-        </tr>
-      `;
-    })
-    .join('');
+function llenarTabla(tbody, rows, emptyLabel, keys) {
+  tbody.replaceChildren();
+  for (const item of rows) {
+    const row = document.createElement('tr');
+    for (const key of keys) {
+      const cell = document.createElement('td');
+      cell.textContent = item[key];
+      row.appendChild(cell);
+    }
+    tbody.appendChild(row);
+  }
+  if (!rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = keys.length;
+    cell.textContent = `Sin resultados para ${emptyLabel}.`;
+    row.appendChild(cell);
+    tbody.appendChild(row);
+  }
+}
+
+function mostrarErrorInforme(elementoId, nombre, message) {
+  const element = document.getElementById(elementoId);
+  const card = element?.closest('.card');
+  if (!card) return;
+
+  let notice = card.querySelector('.report-error');
+  if (!notice) {
+    notice = document.createElement('p');
+    notice.className = 'report-error';
+    notice.setAttribute('role', 'status');
+    card.prepend(notice);
+  }
+  notice.textContent = `${nombre}: no se pudieron cargar los datos. ${message}`;
+}
+
+function limpiarErrorInforme(elementoId) {
+  document.getElementById(elementoId)?.closest('.card')?.querySelector('.report-error')?.remove();
+}
+
+function money(value) {
+  return `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function compact(value) {
+  return value > 999 ? `${(value / 1000).toFixed(1)}k` : value.toLocaleString();
 }

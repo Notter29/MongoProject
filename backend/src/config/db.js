@@ -9,9 +9,9 @@ const { MongoClient } = require('mongodb');
 let client = null;
 let dbInstance = null;
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/?replicaSet=rs0';
-const DB_NAME = process.env.DB_NAME || 'ecommerce_analytics';
-const COLLECTION_NAME = process.env.COLLECTION_NAME || 'eventos';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27018/?replicaSet=rs0';
+const DB_NAME = process.env.DB_NAME || 'nyc_taxi_analytics';
+const COLLECTION_NAME = process.env.COLLECTION_NAME || 'yellow_trips';
 
 /**
  * Conecta a MongoDB y retorna la instancia de la base de datos.

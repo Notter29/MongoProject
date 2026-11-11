@@ -5,7 +5,6 @@
  */
 
 const nlpService = require('../services/nlp/nlp.service');
-const embeddingService = require('../services/nlp/embedding.service');
 
 class NlpController {
   async procesarConsulta(req, res) {
@@ -30,28 +29,6 @@ class NlpController {
     }
   }
 
-  // Búsqueda Semántica Vectorial por Similitud del Coseno
-  async busquedaSemanticaCoseno(req, res) {
-    try {
-      const { consulta, proveedor } = req.body;
-
-      if (!consulta || typeof consulta !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'El campo "consulta" es obligatorio.'
-        });
-      }
-
-      const resultado = await embeddingService.buscarPorSimilitudCoseno(consulta, proveedor);
-      res.json({ success: true, data: resultado });
-    } catch (error) {
-      console.error(`[EMBEDDING CONTROLLER ERROR] ${error.message}`);
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
-    }
-  }
 }
 
 module.exports = new NlpController();

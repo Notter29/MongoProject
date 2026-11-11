@@ -17,7 +17,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 async function bootstrap() {
   try {
     console.log('='.repeat(70));
-    console.log('INICIANDO SERVIDOR BACKEND - BASES DE DATOS II');
+    console.log('INICIANDO SERVIDOR BACKEND - NYC TAXI ANALYTICS');
     console.log('='.repeat(70));
 
     // 1. Conexión al motor MongoDB Replica Set

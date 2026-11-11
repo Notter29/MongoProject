@@ -1,102 +1,42 @@
-/**
- * @file api.js
- * @description Cliente de comunicación REST con el backend.
- */
-
 const API_BASE = '/api';
 
+async function requestJson(url, options) {
+  const response = await fetch(url, options);
+  const result = await response.json();
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || `La API respondió ${response.status}.`);
+  }
+  return result.data;
+}
+
 const api = {
-  async getStats() {
-    const res = await fetch(`${API_BASE}/stats`);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async getInforme1Ventas(fechaInicio, fechaFin) {
-    let url = `${API_BASE}/informes/1-ventas-periodo`;
+  getStats: () => requestJson(`${API_BASE}/stats`),
+  getInforme1Viajes: (fechaInicio, fechaFin) => {
     const params = new URLSearchParams();
-    if (fechaInicio) params.append('fechaInicio', fechaInicio);
-    if (fechaFin) params.append('fechaFin', fechaFin);
-    if (params.toString()) url += `?${params.toString()}`;
-
-    const res = await fetch(url);
-    const json = await res.json();
-    return json.data;
+    if (fechaInicio) params.set('fechaInicio', fechaInicio);
+    if (fechaFin) params.set('fechaFin', fechaFin);
+    const query = params.toString();
+    return requestJson(`${API_BASE}/informes/1-viajes-periodo${query ? `?${query}` : ''}`);
   },
-
-  async getInforme2TopProductos(limite = 15) {
-    const res = await fetch(`${API_BASE}/informes/2-productos-top?limite=${limite}`);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async getInforme3Marcas(limite = 15) {
-    const res = await fetch(`${API_BASE}/informes/3-marcas-rentables?limite=${limite}`);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async getInforme4Categorias(limite = 12) {
-    const res = await fetch(`${API_BASE}/informes/4-categorias?limite=${limite}`);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async getInforme5Clientes(limite = 20) {
-    const res = await fetch(`${API_BASE}/informes/5-clientes-top?limite=${limite}`);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async getInforme6Embudo() {
-    const res = await fetch(`${API_BASE}/informes/6-embudo-conversion`);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async getInforme7Horarios() {
-    const res = await fetch(`${API_BASE}/informes/7-horarios-demanda`);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async getInforme8Disminucion(fechaCorte, limite = 15) {
-    let url = `${API_BASE}/informes/8-disminucion-demanda?limite=${limite}`;
-    if (fechaCorte) url += `&fechaCorte=${encodeURIComponent(fechaCorte)}`;
-    const res = await fetch(url);
-    const json = await res.json();
-    return json.data;
-  },
-
-  async postInforme9NLP(pregunta, proveedor = 'gemini') {
-    const res = await fetch(`${API_BASE}/informes/9-lenguaje-natural`, {
+  getInforme2Zonas: (limite = 10) =>
+    requestJson(`${API_BASE}/informes/2-zonas-recogida?limite=${limite}`),
+  getInforme3Rutas: (limite = 10) =>
+    requestJson(`${API_BASE}/informes/3-rutas-populares?limite=${limite}`),
+  getInforme4Distritos: (limite = 10) =>
+    requestJson(`${API_BASE}/informes/4-ingresos-distrito?limite=${limite}`),
+  getInforme5Pagos: () => requestJson(`${API_BASE}/informes/5-formas-pago`),
+  getInforme6Distancias: () => requestJson(`${API_BASE}/informes/6-distancias`),
+  getInforme7Horarios: () => requestJson(`${API_BASE}/informes/7-demanda-horaria`),
+  getInforme8Propinas: (limite = 10) =>
+    requestJson(`${API_BASE}/informes/8-propinas?limite=${limite}`),
+  getInforme10ViajesRecientes: (limite = 25) =>
+    requestJson(`${API_BASE}/informes/10-viajes-recientes?limite=${limite}`),
+  postInforme9NLP: (pregunta, proveedor = 'gemini') =>
+    requestJson(`${API_BASE}/informes/9-lenguaje-natural`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pregunta, proveedor })
-    });
-    const json = await res.json();
-    if (!json.success) {
-      throw new Error(json.error || 'Error al procesar la consulta en lenguaje natural.');
-    }
-    return json.data;
-  },
-
-  async postBusquedaCoseno(consulta, proveedor = 'gemini') {
-    const res = await fetch(`${API_BASE}/informes/busqueda-semantica-coseno`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ consulta, proveedor })
-    });
-    const json = await res.json();
-    if (!json.success) {
-      throw new Error(json.error || 'Error en búsqueda por similitud del coseno.');
-    }
-    return json.data;
-  },
-
-  async getInforme10EventosRecientes(limite = 25) {
-    const res = await fetch(`${API_BASE}/informes/10-eventos-recientes?limite=${limite}`);
-    const json = await res.json();
-    return json.data;
-  }
+    }),
+  buscarZonas: (consulta) =>
+    requestJson(`${API_BASE}/zonas?q=${encodeURIComponent(consulta)}`)
 };

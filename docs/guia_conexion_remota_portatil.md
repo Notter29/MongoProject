@@ -1,77 +1,26 @@
-# 🛰️ Guía de Conexión Remota para el Portátil (Instancia de Gemini & Sustentación)
+# Guía de acceso al dashboard
 
-**Asignatura:** Bases de Datos II — Proyecto Parcial  
-**Arquitectura:** Cliente Remoto (Portátil en la Universidad) $\rightarrow$ Servidor Host (PC de Escritorio en Casa)  
-**Base de Datos Activa:** `ecommerce_analytics` (+25 GB BSON / 116M+ documentos / MongoDB Replica Set `rs0`)  
+## En el mismo equipo
 
----
+1. Inicia el MongoDB Replica Set `rs0` local por el puerto `27018`.
+2. Inicia el backend desde `backend` con `corepack pnpm start`.
+3. Abre `http://localhost:3000`.
 
-## 1. Direcciones IP Disponibles de este PC de Escritorio (Servidor)
+El dashboard y la API son accesibles por el equipo anfitrión. MongoDB está configurado por defecto para enlazarse a `127.0.0.1`; no se debe exponer el puerto `27018` directamente a Internet.
 
-Este PC de escritorio cuenta con las siguientes interfaces de red:
+## Simular un viaje en tiempo real
 
-| Tipo de Red | Dirección IP del PC de Escritorio | Cuándo Usarla |
-| :--- | :---: | :--- |
-| **VPN ZeroTier / Tailscale** | `<IP_VPN_O_ZEROTIER>` | Si unes el portátil a la misma VPN (ZeroTier o Tailscale). |
-| **Red Local (LAN Casa / Wi-Fi)** | `<IP_LOCAL_LAN>` | Para realizar pruebas previas desde el portátil dentro de tu misma red. |
+En una terminal adicional desde la raíz del proyecto:
 
----
-
-## 2. Preparación Obligatoria del PC de Escritorio (Antes de Salir de Casa)
-
-1. **Desactivar la Suspensión de Windows:**
-   - *Configuración $\rightarrow$ Sistema $\rightarrow$ Inicio/apagado y suspensión* $\rightarrow$ **NUNCA**.
-2. **Ejecutar Reglas del Firewall (como Administrador):**
-   ```powershell
-   & "M:\Proyecto base de datos2\scripts_auxiliares\configurar_firewall.ps1"
-   ```
-3. **Mantener Servicios Activos:**
-   - MongoDB 7.0 Replica Set (`rs0`) en puerto `27017`.
-   - Backend Express + Socket.io en puerto `3000`.
-4. **Plan de Respaldo:**
-   - Dejar AnyDesk con clave de acceso desatendido activa.
-
----
-
-## 3. Acciones en el Portátil (En la Universidad)
-
-### A. Abrir el Dashboard
-```text
-http://<IP_PC_ESCRITORIO>:3000
-```
-Verifica que el indicador marque `🟢 En vivo (Change Streams)` y `dataSize: 25.45 GB`.
-
-### B. Conectar MongoDB Compass
-Cadena de conexión en el portátil:
-```text
-mongodb://<IP_PC_ESCRITORIO>:27017/?replicaSet=rs0
-```
-
-### C. Inyectar Compras en Vivo (Simulador)
 ```powershell
-$env:MONGO_URI="mongodb://<IP_PC_ESCRITORIO>:27017/?replicaSet=rs0"
-py database/scripts/simulador_tiempo_real.py
+python database\scripts\simulador_tiempo_real.py
 ```
 
----
+Los documentos de demo se insertan en `nyc_taxi_analytics.yellow_trips`; MongoDB los publica por Change Streams y Socket.io los presenta en el monitor, actualizando además las tarjetas y el gráfico de zonas.
 
-## 4. Prompt para la Instancia de Gemini en el Portátil
+## Verificar la API
 
-Copia y pega este prompt al iniciar la conversación con Gemini en el portátil:
-
-```markdown
-Hola Gemini. Estoy en mi portátil en la universidad sustentando el Proyecto Parcial de Bases de Datos II ("Dashboard para análisis de grandes volúmenes de datos").
-
-Toda la infraestructura pesada está corriendo en mi PC de escritorio en casa y nos conectamos mediante VPN remota:
-- IP del PC de escritorio: <PEGA_AQUÍ_LA_IP_EJ_10.130.192.233_O_100.x.y.z>
-- MongoDB 7.0 Replica Set 'rs0' en el puerto 27017 (escuchando en 0.0.0.0).
-- Base de datos: 'ecommerce_analytics', colección: 'eventos' con más de 25 GB lógicos (dataSize >= 20 GB) y 116 millones de registros.
-- Backend Node.js (Express + Socket.io + Change Streams) en el puerto 3000.
-- Dashboard accesible en: http://<IP_PC_ESCRITORIO>:3000
-
-Tu rol en este portátil es asistirme durante la sustentación:
-1. Probar conectividad HTTP hacia http://<IP_PC_ESCRITORIO>:3000/api/stats.
-2. Ayudarme a ejecutar el script 'simulador_tiempo_real.py' apuntando a la cadena 'mongodb://<IP_PC_ESCRITORIO>:27017/?replicaSet=rs0' para inyectar compras en tiempo real.
-3. Proporcionarme explicaciones técnicas ante preguntas del profesor sobre la optimización de índices (COLLSCAN vs IXSCAN) y la arquitectura en capas.
-¿Entendido? Confírmame y verifica la conexión a la API.
+```powershell
+Invoke-RestMethod http://localhost:3000/api/stats
+Invoke-RestMethod "http://localhost:3000/api/zonas?q=Queens"
 ```

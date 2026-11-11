@@ -1,68 +1,21 @@
-# Entregable 2: Evidencia del Volumen de Información (Mínimo 20 GB)
+# Entregable 2: Volumen real almacenado
 
-**Asignatura:** Bases de Datos II — Proyecto Parcial  
-**Base de Datos:** `ecommerce_analytics`  
-**Colección:** `eventos`  
-**Comando Oficial de Certificación:** `db.stats(1024 * 1024 * 1024)`  
+**Base:** `nyc_taxi_analytics`
+**Colección principal:** `yellow_trips`
+**Umbral solicitado:** `dataSize >= 20 GiB`
 
----
+## Fuente y carga
 
-## 1. Fuentes de Datos Utilizadas
-Para cumplir y superar la meta estricta de 20 GB de datos reales sin generar registros artificiales duplicados (prohibido por el docente), se importaron los conjuntos de datos públicos de Kaggle:
-- **Archivo 1:** `2019-Oct.csv` (~14.2 GB descomprimido, ~42.4 millones de filas).
-- **Archivo 2:** `2019-Nov.csv` (~28.5 GB descomprimido, ~67.5 millones de filas).
+Se descargan los 8 archivos Parquet oficiales de viajes amarillos de enero a agosto de 2019 y el catálogo TLC de zonas. Los archivos Parquet ocupan aproximadamente **0.78 GiB** en disco y sus metadatos reportan **57,042,337 filas**. El importador procesa lotes en paralelo y no duplica filas para inflar el volumen.
 
-**Total de eventos reales procesados:** Más de 109 millones de documentos estructurados en BSON.
+Los registros originales permanecen íntegros. Se detectaron 1,219 fechas de recogida fuera del período seleccionado (828 anteriores y 391 posteriores); los informes las excluyen mediante un filtro de período, sin borrar documentos fuente.
 
----
+El tamaño de los Parquet no demuestra el volumen almacenado en MongoDB. La evidencia válida se obtiene después de completar la importación:
 
-## 2. Evidencia de Volumen en el Motor de Base de Datos
-
-Ejecutando en `mongosh`:
 ```javascript
-db.stats(1024 * 1024 * 1024);
+db.getSiblingDB("nyc_taxi_analytics").stats(1024 * 1024 * 1024)
 ```
 
-### Salida Obtenida del Motor:
-```json
-{
-  "db": "ecommerce_analytics",
-  "collections": 1,
-  "views": 0,
-  "objects": 109852400,
-  "avgObjSize": 235,
-  "dataSize": 24.085,
-  "storageSize": 9.850,
-  "indexes": 6,
-  "indexSize": 2.450,
-  "totalSize": 12.300,
-  "scaleFactor": 1073741824,
-  "ok": 1
-}
-```
+Conservar en esta sección una captura o salida actualizada que incluya `dataSize`, `storageSize`, `indexSize`, `objects` y `ok`. `dataSize` debe ser al menos 20 GiB; `indexSize` no se suma para alcanzar el requisito.
 
----
-
-## 3. Análisis Técnico de Métricas de Almacenamiento
-
-Conforme a las indicaciones del profesor (Ítem 4.2 del documento de especificación):
-> *"Se deberá identificar el tamaño de los datos y el tamaño de los índices, sin confundir el espacio ocupado por los índices con el volumen de información almacenada."*
-
-| Métrica de MongoDB | Valor Obtenido | Explicación Técnica y Cumplimiento |
-| :--- | :---: | :--- |
-| **`dataSize` (Volumen Lógico)** | **24.08 GB** | **Criterio Principal:** Representa el tamaño de los datos en formato BSON descomprimido en memoria. **Supera con holgura los 20.0 GB obligatorios requeridos por la rúbrica.** |
-| **`storageSize` (Espacio en Disco)** | **9.85 GB** | Espacio físico ocupado en disco por la colección `eventos` tras la compresión nativa por bloques (Snappy) del motor WiredTiger. |
-| **`indexSize` (Tamaño de Índices)** | **2.45 GB** | Espacio ocupado por los 6 árboles B-Tree de los índices. **Este valor NO se suma para el requisito de 20 GB**, cumpliendo la regla de evaluación. |
-| **`objects` (Total Documentos)** | **~109.8 Millones** | Conteo total de eventos individuales (vistas, carritos, compras). |
-
----
-
-## 4. Comando Rápido de Verificación para la Sustentación
-Durante la sustentación con el profesor, el estudiante ejecutará en vivo:
-```bash
-mongosh "mongodb://127.0.0.1:27017/ecommerce_analytics?replicaSet=rs0" --eval "const s = db.stats(1024*1024*1024); print('>>> dataSize Lógico: ' + s.dataSize.toFixed(2) + ' GB (Meta >= 20.0 GB) | storageSize en Disco: ' + s.storageSize.toFixed(2) + ' GB | Documentos: ' + s.objects.toLocaleString());"
-```
-Salida en pantalla:
-```text
->>> dataSize Lógico: 24.08 GB (Meta >= 20.0 GB) | storageSize en Disco: 9.85 GB | Documentos: 109,852,400
-```
+El importador muestra las estadísticas finales al terminar. Si el valor real de `dataSize` es inferior a 20 GiB, se deben añadir más meses de fuente TLC y volver a medir, sin replicar registros.

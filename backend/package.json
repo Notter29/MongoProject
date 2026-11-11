@@ -1,7 +1,7 @@
 {
-  "name": "ecommerce-analytics-backend",
+  "name": "nyc-taxi-analytics-backend",
   "version": "1.0.0",
-  "description": "Backend API para Dashboard de Grandes Volúmenes (+20 GB) con MongoDB Replica Set, Change Streams, Socket.io y Consultas en Lenguaje Natural (Gemini / Ollama)",
+  "description": "API y dashboard de análisis de viajes NYC TLC con MongoDB Replica Set, Change Streams y consultas en lenguaje natural",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
