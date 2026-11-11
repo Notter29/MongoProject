@@ -1,0 +1,18 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run NYC Taxi API (local MongoDB Replica Set)",
+			"type": "shell",
+			"command": "cmd.exe",
+			"args": [
+				"/d",
+				"/s",
+				"/c",
+				"set MONGO_URI=mongodb://127.0.0.1:27018/?replicaSet=rs0&& set DB_NAME=nyc_taxi_analytics&& set COLLECTION_NAME=yellow_trips&& cd /d backend&& node server.js"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
