@@ -67,7 +67,6 @@
         <button class="tab-btn" data-tab="tab-comercial" data-title="Mapa de recorridos"><span class="nav-icon">⌖</span><span>Mapa de recorridos</span></button>
         <button class="tab-btn" data-tab="tab-distancias-horarios" data-title="Ritmo de la ciudad"><span class="nav-icon">▤</span><span>Ritmo de la ciudad</span></button>
         <button class="tab-btn" data-tab="tab-lenguaje-natural" data-title="Asistente de datos"><span class="nav-icon">✳</span><span>Asistente de datos</span></button>
-        <button class="tab-btn" data-tab="tab-optimizacion" data-title="Salud y rendimiento"><span class="nav-icon">⌁</span><span>Salud y rendimiento</span></button>
       </nav>
       <div class="sidebar-footer">
         <span class="sidebar-footer-dot"></span>
@@ -418,119 +417,6 @@
             </table>
           </div>
 
-        </div>
-      </div>
-
-    </div>
-
-    <!-- ====================================================================== -->
-    <!-- PESTAÑA 5: OPTIMIZACIÓN & EXPLAIN (Entregable 8)                        -->
-    <!-- ====================================================================== -->
-    <div id="tab-optimizacion" class="tab-pane">
-
-      <div class="charts-grid">
-        <!-- Tarjeta de Índices Implementados -->
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Índices de viajes y catálogo de zonas</span>
-            <span class="badge badge-db">Entregable 8</span>
-          </div>
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nombre del Índice</th>
-                  <th>Definición de Campos</th>
-                  <th>Propósito de Optimización</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>idx_pickup_datetime</code></td>
-                  <td><code>{ pickup_datetime: -1 }</code></td>
-                  <td>Serie temporal de viajes e informe de viajes recientes.</td>
-                </tr>
-                <tr>
-                  <td><code>idx_pickup_zone_time</code></td>
-                  <td><code>{ pickup_location_id: 1, pickup_datetime: -1 }</code></td>
-                  <td>Filtros por zona de origen y fecha.</td>
-                </tr>
-                <tr>
-                  <td><code>idx_dropoff_zone_time</code></td>
-                  <td><code>{ dropoff_location_id: 1, pickup_datetime: -1 }</code></td>
-                  <td>Filtros por destino y análisis de rutas (Informe 3).</td>
-                </tr>
-                <tr>
-                  <td><code>idx_payment_type_time</code></td>
-                  <td><code>{ payment_type: 1, pickup_datetime: -1 }</code></td>
-                  <td>Consultas filtradas por forma de pago (Informe 5).</td>
-                </tr>
-                <tr>
-                  <td><code>idx_trip_distance_time</code></td>
-                  <td><code>{ trip_distance: 1, pickup_datetime: -1 }</code></td>
-                  <td>Consultas por rango de distancia (Informe 6).</td>
-                </tr>
-                <tr>
-                  <td><code>idx_taxi_zone_name</code></td>
-                  <td><code>{ borough: 1, zone: 1 }</code></td>
-                  <td>Catálogo de zonas TLC y búsqueda por nombre.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Comparativa Explain Plan (COLLSCAN vs IXSCAN) -->
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Comparativa de Rendimiento con explain("executionStats")</span>
-            <span class="badge badge-live">Demostración Académica</span>
-          </div>
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Métrica de Rendimiento</th>
-                  <th style="color: #ef4444;">Sin Índices (COLLSCAN)</th>
-                  <th style="color: #46515d;">Con Índices (IXSCAN)</th>
-                  <th>Mejora</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>Tipo de Escaneo (Stage)</strong></td>
-                  <td style="color: #ef4444;">COLLSCAN (Escaneo total)</td>
-                  <td style="color: #46515d;">IXSCAN + FETCH (Índice)</td>
-                  <td>Búsqueda indexada B-Tree</td>
-                </tr>
-                <tr>
-                  <td><strong>Tiempo de Ejecución</strong></td>
-                  <td style="color: #ef4444;">Medición local</td>
-                  <td style="color: #46515d;">Medición local</td>
-                  <td>Comparar con explain()</td>
-                </tr>
-                <tr>
-                  <td><strong>Documentos Examinados</strong></td>
-                  <td style="color: #ef4444;">Depende del filtro</td>
-                  <td style="color: #46515d;">Depende del índice</td>
-                  <td>Verificar con explain()</td>
-                </tr>
-                <tr>
-                  <td><strong>Uso de CPU / Memoria</strong></td>
-                  <td style="color: #ef4444;">100% de CPU durante escaneo</td>
-                  <td style="color: #46515d;">Mínimo e imperceptible</td>
-                  <td>Consumo eficiente</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div style="margin-top: 1.5rem; background: var(--bg-secondary); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
-            <div style="font-size: 0.85rem; font-weight: 600; color: var(--accent-cyan); margin-bottom: 0.5rem;">
-              Comando para reproducir en vivo ante el docente en MongoDB Compass / mongosh:
-            </div>
-            <pre style="font-family: var(--font-mono); font-size: 0.8rem; color: #f8fafc; overflow-x: auto;">db.yellow_trips.find({ pickup_datetime: { $gte: ISODate("2019-01-01"), $lt: ISODate("2019-02-01") } }).explain("executionStats")</pre>
-          </div>
         </div>
       </div>
 
